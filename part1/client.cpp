@@ -153,3 +153,8 @@ int main() {
 
     return 0;
 }
+
+
+
+// to kill a port find the pid using sudo ss -tulnp | grep ':65432'
+//kill using sudo kill pid

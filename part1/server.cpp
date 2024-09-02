@@ -21,61 +21,63 @@ std::vector<std::string> split_words(const std::string &data) {
     std::istringstream ss(data);
     std::string word;
     while (getline(ss, word, ',')) {
-        words.push_back(word);
+        if (!word.empty()) {
+            words.push_back(word);
+        }
     }
     return words;
 }
 
 // Handle the client request
 void handle_client(int client_socket, char *file_content, size_t file_size) {
-    // char buffer[1024] = {0};  // Initialize buffer
-    // std::vector<std::string> words = split_words(file_content);
-    // int total_words = words.size();
+    char buffer[1024] = {0};  // Initialize buffer
+    std::vector<std::string> words = split_words(file_content);
+    int total_words = words.size();
 
-    // // Receive the offset from the client
-    // int bytes_received = read(client_socket, buffer, sizeof(buffer));
-    
-    // if (bytes_received <= 0) {
-    //     close(client_socket);
-    //     return;
-    // }
+    // Receive the offset from the client
+    int bytes_received = read(client_socket, buffer, sizeof(buffer) - 1);
+    if (bytes_received <= 0) {
+        close(client_socket);
+        return;
+    }
+    buffer[bytes_received] = '\0';  // Null-terminate the string
+    int offset = std::stoi(buffer);
 
-    // std::string request(buffer);
-    // int offset = atoi(request.c_str());
+    // If offset is out of range, send an error message and close
+    if (offset >= total_words) {
+        const char *end_message = "ERROR: Offset out of range\n";
+        send(client_socket, end_message, strlen(end_message), 0);
+        close(client_socket);
+        return;
+    }
 
-    // // If offset is out of range, send newline and close
-    // if (offset >= total_words) {
-    //     const char *end_message = "\n";
-    //     send(client_socket, end_message, strlen(end_message), 0);
-    //     close(client_socket);
-    //     return;
-    // }
-    
-
-    // int index = 0;
-    // // while (index < K) {
-    //     std::string response="";
-
-    //     // Send chunks of words
+    // Prepare and send chunks of words
+    int index = offset;
+    while (index < offset + K && index < total_words) {
+        std::string response;
+        int chunk_end = std::min(index + CHUNK_SIZE, total_words);
         
-    //     for (int i = 0; i <= CHUNK_SIZE && (offset + i) <= total_words; ++i) {
-    //         response += words[offset + i];
+        for (int i = index; i < chunk_end; ++i) {
+            response += words[i] + ",";
+        }
+        
+        // Remove trailing comma
+        if (!response.empty() && response.back() == ',') {
+            response.pop_back();
+        }
 
-    //         if ((offset + i) == total_words) {  // Last word in file
-    //             response += ",EOF\n";
-    //         } else if (i == CHUNK_SIZE ) {  // End of current chunk
-    //             response += CHUNK_SIZE+"\n";
-    //         } else {  // Normal word in the middle
-    //             response += "";
-    //         }
-    //     }
+        // Check if we need to add the EOF marker
+        if (chunk_end == total_words) {
+            response += ",EOF";
+        }
+        
+        response += "\n";  // End of chunk
+        send(client_socket, response.c_str(), response.size(), 0);
 
-    //     // Send the response to the client
-    //     send(client_socket, response.c_str(), response.size(), 0);
+        index = chunk_end;  // Move to the next chunk
+    }
 
-    // // }
-
-    // close(client_socket);
+    close(client_socket);
 }
 
 // Load server configuration from JSON
@@ -95,10 +97,17 @@ int main() {
     int server_fd, client_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
+    int opt = 1;
 
     // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
+        exit(EXIT_FAILURE);
+    }
+
+    // Set socket options
+    if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
         exit(EXIT_FAILURE);
     }
 
@@ -107,11 +116,6 @@ int main() {
     address.sin_port = htons(PORT);
 
     // Bind socket
-//     int opt = 1;
-// if (setsockopt(server_fd, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
-//     perror("setsockopt failed");
-//     exit(EXIT_FAILURE);
-// }
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
@@ -135,6 +139,7 @@ int main() {
     char *file_content = static_cast<char *>(mmap(NULL, file_size, PROT_READ, MAP_PRIVATE, fd, 0));
     if (file_content == MAP_FAILED) {
         perror("mmap failed");
+        close(fd);
         exit(EXIT_FAILURE);
     }
 
