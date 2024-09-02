@@ -15,7 +15,7 @@ std::string SERVER_IP;
 int K;
 int P;
 std::string FILENAME;
-std::unordered_map<std::string,int>word_map;
+
 std::vector<std::string> split_words(const std::string &data) {
     std::vector<std::string> words;
     std::istringstream ss(data);
@@ -44,7 +44,7 @@ double run_experiment() {
     int sock = 0;
     struct sockaddr_in serv_addr;
     char buffer[1024] = {0};
-    int offset = 0;
+    int offset = 10;
     auto start_time = std::chrono::high_resolution_clock::now();
 
     if ((sock = socket(AF_INET, SOCK_STREAM, 0)) < 0) {
@@ -66,19 +66,29 @@ double run_experiment() {
     }
 
     std::map<std::string, int> word_count;
-
-    while (true) {
+    // int bytes_received;
+    int init_offset=offset;
+    int word_cnt=0;
+    while(true){
+        if(word_cnt>=K)break;
         std::string request = std::to_string(offset);
+        std::cout<<"offset is "<<request<<std::endl;
         send(sock, request.c_str(), request.size(), 0);
-
-        int bytes_received = read(sock, buffer, sizeof(buffer));
+        memset(buffer, 0, sizeof(buffer));
+       
+        int bytes_received = read(sock, buffer, sizeof(buffer) - 1);
+        
+        std::cout<<"buffer is "<<buffer<<std::endl;
+   
         if (bytes_received < 0) {
             std::cerr << "Read error" << std::endl;
             break;
         }
 
         std::string response(buffer, bytes_received);
-        if (response == "EOF") {
+        std::cout<<response<<std::endl;
+        
+        if (response == "EOF\n" || response=="") {
             break;
         }
 
@@ -99,25 +109,16 @@ double run_experiment() {
                 ++word_count[word];
             }
         }
-        std::istringstream iss(response);
-        std::vector<std::string> words;
-        std::string word;
-
-        while (iss >> word) {
-            words.push_back(word);
-        }
-
-        for (const auto& w : words) {
-            word_map[w]++;
-        }
-
+       
+        
 
         // Update offset (assuming offset increases by the number of words processed)
-        offset += K;
+        offset += (P-1);
+        word_cnt+=P;
 
         // offset += words.size();
     }
-    for (auto it:word_map) {
+    for (auto it:word_count) {
         std::cout << it.first << ": " << it.second << std::endl;
     }
    
@@ -133,22 +134,22 @@ int main() {
     load_config();
     std::vector<double> times;
 
-    for (int i = 1; i <= 10; ++i) {
-        P = i;
-        double total_time = 0;
-        for (int j = 0; j < 10; ++j) {
+    // for (int i = 1; i <= 10; ++i) {
+    //     P = i;
+    //     double total_time = 0;
+    //     for (int j = 0; j < 10; ++j) {
             double time_taken = run_experiment();
-            total_time += time_taken;
-        }
-        double avg_time = total_time / 10.0;
-        times.push_back(avg_time);
-    }
+    //         total_time += time_taken;
+    //     }
+    //     double avg_time = total_time / 10.0;
+    //     times.push_back(avg_time);
+    // }
 
-    std::ofstream out("times.txt");
-    for (const auto &time : times) {
-        out << time << std::endl;
-    }
-    out.close();
+    // std::ofstream out("times.txt");
+    // for (const auto &time : times) {
+    //     out << time << std::endl;
+    // }
+    // out.close();
 
     return 0;
 }

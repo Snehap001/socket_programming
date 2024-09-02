@@ -14,4 +14,4 @@ plot: run
 	python3 plot.py
 
 clean:
-	rm -f $(CLIENT) $(SERVER) *.txt plot.png
+	rm -f $(CLIENT) $(SERVER) plot.png
