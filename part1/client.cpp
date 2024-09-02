@@ -69,8 +69,8 @@ double run_experiment() {
     // int bytes_received;
     int init_offset=offset;
     int word_cnt=0;
-    while(true){
-        if(word_cnt>=K)break;
+    // while(true){
+    //     if(word_cnt>K)break;
         std::string request = std::to_string(offset);
         std::cout<<"offset is "<<request<<std::endl;
         send(sock, request.c_str(), request.size(), 0);
@@ -82,22 +82,23 @@ double run_experiment() {
    
         if (bytes_received < 0) {
             std::cerr << "Read error" << std::endl;
-            break;
+            // break;
         }
 
         std::string response(buffer, bytes_received);
         std::cout<<response<<std::endl;
         
-        if (response == "EOF\n" || response=="") {
-            break;
-        }
+        // if (response == "EOF\n" || response=="") {
+        //     ;
+        // }
 
         // Split the response into words and count them
         size_t start = 0, end = 0;
        
         while ((end = response.find(',', start)) != std::string::npos) {
             std::string word = response.substr(start, end - start);
-            if (!word.empty()) {
+        
+            if (!word.empty() && word !="\n" ) {
                 ++word_count[word];
             }
             start = end + 1;
@@ -105,7 +106,7 @@ double run_experiment() {
         // Handle the last word (if any) or words without commas
         if (start < response.size()) {
             std::string word = response.substr(start);
-            if (!word.empty()) {
+            if (!word.empty() && word!="\n" && word!=" ") {
                 ++word_count[word];
             }
         }
@@ -117,7 +118,7 @@ double run_experiment() {
         word_cnt+=P;
 
         // offset += words.size();
-    }
+    // }
     for (auto it:word_count) {
         std::cout << it.first << ": " << it.second << std::endl;
     }

@@ -68,10 +68,12 @@ void handle_client(int client_socket, char *file_content, size_t file_size) {
 
         // Check if we need to add the EOF marker
         if (chunk_end == total_words) {
-            response += ",EOF";
+            response += ",EOF\n";
+        }
+        else{
+            response += ",\n";  // End of chunk
         }
         
-        response += "\n";  // End of chunk
         send(client_socket, response.c_str(), response.size(), 0);
 
         index = chunk_end;  // Move to the next chunk
@@ -97,8 +99,8 @@ int main() {
     int server_fd, client_socket;
     struct sockaddr_in address;
     int addrlen = sizeof(address);
-    int opt = 1;
-
+  
+    int opt=1;
     // Create socket
     if ((server_fd = socket(AF_INET, SOCK_STREAM, 0)) == 0) {
         perror("socket failed");
@@ -116,6 +118,7 @@ int main() {
     address.sin_port = htons(PORT);
 
     // Bind socket
+ 
     if (bind(server_fd, (struct sockaddr *)&address, sizeof(address)) < 0) {
         perror("bind failed");
         exit(EXIT_FAILURE);
