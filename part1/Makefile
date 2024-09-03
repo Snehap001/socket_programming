@@ -7,11 +7,9 @@ build: $(CLIENT).cpp $(SERVER).cpp
 	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
 
-run0: build
+run: build
 	./server &
-run: run0
-	./client     
-
+	./client
 plot: run
 	python3 plot.py
 

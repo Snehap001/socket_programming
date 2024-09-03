@@ -9,6 +9,8 @@
 #include <arpa/inet.h>
 #include <unistd.h>
 #include <jsoncpp/json/json.h>
+#include <math.h>
+#include <numeric>
 using namespace std;
 struct client_config{
     string server_ip;
@@ -23,7 +25,8 @@ class Client{
     char* buffer;
     int communication_socket;
     string incomplete_packet;
-    std::map<std::string, int> word_count;
+    map<string, int> word_count;
+  
 
     void open_connection();
     void send_request(int offset);
@@ -47,7 +50,7 @@ Client::~Client(){
 void Client::load_config() {
 
     //loads the configuration of client for communication
-    ifstream config_file("config.json", std::ifstream::binary);
+    ifstream config_file("config.json", ifstream::binary);
     Json::Value configuration;
     config_file >> configuration;
     config.server_ip = configuration["server_ip"].asString();
@@ -59,20 +62,20 @@ void Client::open_connection() {
 
     //creates the socket for the data connection
     if ((communication_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-        std::cerr << "Socket creation error" << std::endl;
+        cerr << "Socket creation error" << endl;
     }
 
     //creates the server adddress
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(config.server_port);
     if (inet_pton(AF_INET, config.server_ip.c_str(), &serv_addr.sin_addr) <= 0) {
-        std::cerr << "Invalid address or address not supported" << std::endl;
+        cerr << "Invalid address or address not supported" << endl;
         close(communication_socket);
     }
 
     //does the three-way handshake
     if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "Connection failed" << std::endl;
+        cerr << "Connection failed" << endl;
         close(communication_socket);
     }
 
@@ -93,9 +96,14 @@ void Client::read_data(){
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
     if (bytes_received < 0) {
-        std::cerr << "Read error client" << std::endl;
+        cerr << "Read error client" << endl;
         close(communication_socket);
+       
+        
     }
+    
+    // cout << "Received: " << bytes_received << endl; 
+   
 
 }
 bool Client::parse_message(){
@@ -144,24 +152,90 @@ void Client::manage_connection() {
     while(data_remaining){
         read_data();
         data_remaining=parse_message();
+        
+
     }
     close(communication_socket);
 }
 void Client::dump_frequency(){
-    std::ofstream outFile("output.txt");
+    ofstream outFile("output.txt");
     if (!outFile) {
-        std::cerr << "Error opening file for writing!" << std::endl;
+        cerr << "Error opening file for writing!" << endl;
     }
     for (const auto& pair : word_count) {
-        outFile << pair.first << ", " << pair.second << std::endl;
+        outFile << pair.first << ", " << pair.second << endl;
     }
     outFile.close();
 }
-int main() {
+void updateConfig(int p) {
+    ifstream config_file("config.json", ifstream::binary);
+    Json::Value config;
+    config_file >> config;
+    config_file.close();
+
+    // Update the "p" value
+    config["p"] = p;
+    // Write back the updated config to the file
+    ofstream updated_config_file("config.json");
+    updated_config_file << config;
+    updated_config_file.close();
+}
+double measureCompletionTime(){
+    auto start = chrono::high_resolution_clock::now();
     Client *client=new Client();
     client->load_config();
     client->manage_connection();
     client->dump_frequency();
     delete client;
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> duration = end - start;
+    return duration.count(); 
+}
+double computeStdDev(const vector<double>& times, double mean) {
+    double sum = 0.0;
+    for (double time : times) {
+        sum += (time - mean) * (time - mean);
+    }
+    return sqrt(sum / times.size());
+}
+int main() {
+    const int NUM_RUNS = 10;
+    vector<double> average_times;
+    vector<double> confidence_intervals;
+
+    for (int p = 1; p <= 10; ++p) {
+        vector<double> times;
+
+        for (int i = 0; i < NUM_RUNS; ++i) {
+            updateConfig(p);  
+            double time = measureCompletionTime();
+            times.push_back(time);
+        }
+
+        double mean = accumulate(times.begin(), times.end(), 0.0) / times.size();
+        average_times.push_back(mean);
+
+        // Calculate the 95% confidence interval (approx. 1.96 * standard deviation)
+        double stddev = computeStdDev(times, mean);
+        double confidence_interval = 1.96 * stddev / sqrt(NUM_RUNS);  // 95% CI
+        confidence_intervals.push_back(confidence_interval);
+
+        // Optionally, save the results to a file
+        ofstream outFile("results_p" + to_string(p) + ".txt");
+        for (double time : times) {
+            outFile << time << endl;
+        }
+        outFile.close();
+    }
+
+    // Save the average times and confidence intervals to a file for plotting
+    ofstream resultsFile("average_times_with_ci.txt");
+    for (int p = 1; p <= 10; ++p) {
+        resultsFile << p << ", " << average_times[p - 1] << ", " << confidence_intervals[p - 1] << endl;
+    }
+    resultsFile.close();
+
+    return 0;
+
     return 0;
 }

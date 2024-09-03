@@ -1,41 +1,29 @@
 import matplotlib.pyplot as plt
 import numpy as np
-import scipy.stats as stats
 
-def read_times(file_path):
-    """Reads completion times from a file."""
-    with open(file_path, 'r') as file:
-        times = [float(line.strip()) for line in file]
-    return times
+p_values = []
+average_times = []
+confidence_intervals = []
 
-def plot_times(times, p_values):
-    """Plots the average completion time with confidence intervals."""
-    mean_times = np.array(times)
-    
-    # Calculate confidence intervals
-    confidence = 0.95
-    n = len(mean_times)
-    stderr = stats.sem(mean_times)
-    confidence_interval = stderr * stats.t.ppf((1 + confidence) / 2., n - 1)
+with open("average_times_with_ci.txt") as f:
+    for line in f:
+        p, avg_time, ci = map(float, line.split(","))
+        p_values.append(p)
+        average_times.append(avg_time)
+        confidence_intervals.append(ci)
 
-    plt.figure(figsize=(10, 6))
-    plt.errorbar(p_values, mean_times, yerr=confidence_interval, fmt='-o', capsize=5, label='Average Completion Time with 95% Confidence Interval')
+p_values = np.array(p_values)
+average_times = np.array(average_times)
+confidence_intervals = np.array(confidence_intervals)
 
-    plt.xlabel('Number of Words per Packet (p)')
-    plt.ylabel('Completion Time (seconds)')
-    plt.title('Completion Time vs. Number of Words per Packet')
-    plt.grid(True)
-    plt.legend()
-    plt.savefig('plot.png')
-    plt.show()
+plt.figure(figsize=(10, 6))
+plt.errorbar(p_values, average_times, yerr=confidence_intervals, fmt='-o', capsize=5, label="Average Completion Time")
 
-if __name__ == "__main__":
-    # Read times from the file
-    file_path = 'times.txt'
-    times = read_times(file_path)
+plt.xlabel('p values')
+plt.ylabel('Completion Time (seconds)')
+plt.title('Average Completion Time vs p Values with 95% Confidence Intervals')
 
-    # Define the range of p values (1 to 10)
-    p_values = list(range(1, 11))
+plt.grid(True)
+plt.legend()
 
-    # Plot the data
-    plot_times(times, p_values)
+plt.show()
