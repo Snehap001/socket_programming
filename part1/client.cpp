@@ -130,8 +130,7 @@ bool Client::parse_message(){
             else {
                 word_count.insert({word,1});
             }
-            word=""; 
-            continue;           
+            word="";            
         }
         word=word+ch;
     }
