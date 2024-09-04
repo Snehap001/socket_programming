@@ -9,8 +9,11 @@ build: $(CLIENT).cpp $(SERVER).cpp
 
 run: build
 	./server &
-	./client
-plot: run
+	./client process
+
+plot: build
+	./server &
+	./client experiment
 	python3 plot.py
 
 clean:

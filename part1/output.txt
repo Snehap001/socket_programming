@@ -1,0 +1,9 @@
+beach, 1
+chair, 1
+drawer, 1
+grass, 1
+ocean, 1
+subway, 1
+tulip, 1
+write, 2
+yellow, 1
