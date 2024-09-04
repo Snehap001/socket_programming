@@ -26,7 +26,7 @@ class Experiment{
     void updateConfig(int p);
     void execute();
     void run();
-    
+
     ~Experiment(){
 
     }
@@ -34,7 +34,6 @@ class Experiment{
 };
 
 void Experiment::updateConfig(int p) {
-    
 
     config["p"] = p;
     ofstream updated_config_file("config.json");
@@ -114,6 +113,7 @@ void Experiment:: run(){
 
 
 }
+
 int main(){
     Experiment E;
     E.run();
