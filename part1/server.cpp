@@ -150,6 +150,11 @@ void Server::open_socket(){
         std::cerr << "Socket creation error" << std::endl;
         exit(1);
     }  
+    int opt=1;
+    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
 
     //creates the server address
     memset(&serv_addr, 0, sizeof(serv_addr));

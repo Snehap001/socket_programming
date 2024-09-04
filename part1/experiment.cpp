@@ -16,7 +16,13 @@ using namespace std;
 
 class Experiment{
     public:
-    Experiment(){}
+    Json::Value config;
+    Experiment(){
+        ifstream config_file("config.json", ifstream::binary);
+        
+        config_file >> config;
+        config_file.close();
+    }
     void updateConfig(int p);
     void execute();
     void run();
@@ -28,10 +34,7 @@ class Experiment{
 };
 
 void Experiment::updateConfig(int p) {
-    ifstream config_file("config.json", ifstream::binary);
-    Json::Value config;
-    config_file >> config;
-    config_file.close();
+    
 
     config["p"] = p;
     ofstream updated_config_file("config.json");
@@ -73,10 +76,8 @@ double computeStdDev(const vector<double>& times, double mean) {
     return sqrt(sum / times.size());
 }
 void Experiment:: run(){
-    ifstream config_file("config.json", ifstream::binary);
-    Json::Value configuration;
-    config_file >> configuration;
-    int K=configuration["k"].asInt();
+    
+    int K=10;
     int NUM_RUNS=10;
     vector<double> average_times;
     vector<double> confidence_intervals;
@@ -117,4 +118,4 @@ int main(){
     Experiment E;
     E.run();
     return 0;
-}
+}  

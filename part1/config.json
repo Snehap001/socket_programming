@@ -2,7 +2,7 @@
 	"filename" : "word.txt",
 	"k" : 10,
 	"n" : 1,
-	"p" : 10,
+	"p" : 1,
 	"server_ip" : "127.0.0.1",
 	"server_port" : 65432
 }
