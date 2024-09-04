@@ -62,7 +62,6 @@ void run_client(){
 }
 void Experiment::execute(){
     run_server();
-    std::this_thread::sleep_for(std::chrono::seconds(10));
     run_client();
 
 
@@ -86,14 +85,10 @@ void Experiment:: run(){
         for (int i = 0; i < NUM_RUNS; ++i) {
             updateConfig(p);
             auto start = chrono::high_resolution_clock::now();
-            // cout<<"start "<<p<<endl;
             execute();
             auto end = chrono::high_resolution_clock::now();
-            // cout<<"end "<<p<<endl;
             chrono::duration<double> duration = end - start;
-            times.push_back(duration.count()-10);
-            std::this_thread::sleep_for(std::chrono::seconds(40));
-            // cout<<duration.count()-10<<endl;
+            times.push_back(duration.count());
 
         }
         double mean = accumulate(times.begin(), times.end(), 0.0) / times.size();
