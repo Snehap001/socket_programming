@@ -64,20 +64,28 @@ void Server::load_data(const char* fname) {
             file.push_back(word);
         }
     }
+    file.push_back("EOF");
 }
 void Server::send_file(){
     int index=stoi(config.offset);
+    int max_index=file.size()-2;
+    string packet="";
+    if(index>=max_index){
+        packet="$$\n";
+        send(client_socket,packet.c_str(), packet.size(), 0);   
+        return;
+    }
     int num_words=config.k;
     int packet_size=config.p;
-    int end=index+num_words;
-    if(file.size()<index){
-        index=file.size();
+    int last_index=index+num_words-1;
+    if(last_index>=max_index){
+        last_index=file.size()-1;
     }
-    while(index<end){
-        string packet="";
+    while(index<=last_index){
+        packet="";
         int this_packet_size=0;
         while(this_packet_size<packet_size){
-            if(index==end){
+            if(index>last_index){
                 break;
             }
             packet=packet+file[index]+",";
@@ -85,20 +93,8 @@ void Server::send_file(){
             index++;
         }
         packet.pop_back();
-        if((index==end)&&(this_packet_size<packet_size)){
-            packet=packet+",EOF\n";
-            send(client_socket, packet.c_str(), packet.size(), 0);
-        }
-        else if((index==end)&&(this_packet_size>=packet_size)){
-            packet=packet+'\n';
-            send(client_socket, packet.c_str(), packet.size(), 0);
-            packet="EOF\n";
-            send(client_socket, packet.c_str(), packet.size(), 0);
-        }
-        else{
-            packet=packet+'\n';
-            send(client_socket, packet.c_str(), packet.size(), 0);           
-        }
+        packet=packet+"\n";
+        send(client_socket, packet.c_str(), packet.size(), 0);
     }
 }
 void Server::read_request(){
@@ -150,6 +146,7 @@ void Server::open_socket(){
         std::cerr << "Socket creation error" << std::endl;
         exit(1);
     }  
+
     int opt=1;
     if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("setsockopt");
