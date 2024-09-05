@@ -2,12 +2,12 @@ CC = g++
 CFLAGS = -std=c++11
 CLIENT = client
 SERVER = server
-EXPERIMENT=experiment
+MULT_CLIENTS=mult_clients
 
-build: $(CLIENT).cpp $(SERVER).cpp $(EXPERIMENT).cpp
+build: $(CLIENT).cpp $(SERVER).cpp $(MULT_CLIENTS).cpp 
 	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
+	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp -ljsoncpp
 
 run: build
 	./server &
@@ -18,4 +18,4 @@ plot: build
 	python3 plot.py
 
 clean:
-	rm -f $(CLIENT) $(SERVER) plot.png
+	rm -f $(CLIENT) $(SERVER) $(MULT_CLIENTS) plot.png
