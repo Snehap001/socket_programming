@@ -80,6 +80,10 @@ void Server::send_file(int client_socket){
     int max_index=file.size()-2;
     string packet="";
     
+    // cout<<client_socket<<endl;
+    // cout<<index<<endl;
+    // cout<<max_index<<endl;
+    
     if(index>=max_index){
         packet="$$\n";
         send(client_socket,packet.c_str(), packet.size(), 0);   
@@ -138,7 +142,7 @@ void Server::manage_connection(int client_socket){
 int Server::accept_connection(){
     struct sockaddr_in clnt_addr;
     // wait for a connection request
-    if (listen(server_socket, MAX_CONNECTIONS) < 0) {
+    if (listen(server_socket, MAX_CONNECTIONS+10) < 0) {
         std::cerr << "Listen failed" << std::endl;
         close(server_socket);        
           

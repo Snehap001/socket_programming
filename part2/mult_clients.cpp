@@ -30,7 +30,7 @@ MultClients::MultClients(){
     config_file.close();
 }
 void run_server(){
-    int status=system("./server &");
+    int status=system("./server > server_output.log 2>&1 &");
     if(status!=0){
         cout<<"failed server"<<endl;
     }
@@ -51,6 +51,7 @@ void run_clients(int num_clients){
     for (auto cmd : commands) {
         
         threads.emplace_back(run_executable,cmd);
+        std::this_thread::sleep_for(std::chrono::seconds(1));
     }
 
     // Join all threads to ensure they finish
@@ -64,6 +65,7 @@ void run_clients(int num_clients){
 }
 void MultClients::execute(){
     run_server;
+    std::this_thread::sleep_for(std::chrono::seconds(3));
     run_clients(num_clients);
 
 }
