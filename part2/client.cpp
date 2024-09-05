@@ -86,6 +86,7 @@ void Client::send_request(int offset){
 
     //sends the request containing the offset
     string request = (to_string(offset)+"\n");
+
     send(communication_socket, request.c_str(), request.size(), 0);
     incomplete_packet="";
 
@@ -182,6 +183,7 @@ void Client::dump_frequency(){
 }
 int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
+
     Client *client=new Client(id);
 
     client->load_config();

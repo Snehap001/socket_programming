@@ -4,7 +4,7 @@ CLIENT = client
 SERVER = server
 MULT_CLIENTS=mult_clients
 
-build: $(CLIENT).cpp $(SERVER).cpp $(MULT_CLIENTS).cpp 
+build: $(CLIENT).cpp $(SERVER).cpp 
 	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp -ljsoncpp

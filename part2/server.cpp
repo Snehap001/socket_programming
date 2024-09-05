@@ -11,10 +11,14 @@
 #include <fcntl.h>
 #include <jsoncpp/json/json.h>  // Include JSON library
 #include <thread>
+#include <mutex>
+#include <unordered_map>
+#include <functional>
 using namespace std;
+
 struct server_config{
     int server_port,k,p,n;
-    string offset;
+    unordered_map<int,string>offsets;
 };
 class Server{
 
@@ -31,7 +35,7 @@ class Server{
     vector<thread> threads;
 
     void send_file(int client_socket);
-    bool parse_request();
+    bool parse_request(int client_socket);
     int accept_connection();
     void open_socket();
     void read_request(int client_socket);
@@ -46,7 +50,7 @@ class Server{
     ~Server();
 };
 Server::Server(){
-    config.offset="";
+    
     buffer=new char[BUFFSIZE];
     MAX_CONNECTIONS=config.n;
 }
@@ -73,12 +77,14 @@ void Server::load_data(const char* fname) {
     file.push_back("EOF");
 }
 void Server::send_file(int client_socket){
-    int index=stoi(config.offset);
+    int index=stoi(config.offsets[client_socket]);
     int max_index=file.size()-2;
     string packet="";
+    
     if(index>=max_index){
         packet="$$\n";
         send(client_socket,packet.c_str(), packet.size(), 0);   
+        // packet=config.offsets[client_socket]+"\n";5  
         return;
     }
     int num_words=config.k;
@@ -123,7 +129,7 @@ void Server::manage_connection(int client_socket){
     bool request_remaining=true;
     while(request_remaining){
         read_request(client_socket);
-        request_remaining=parse_request();
+        request_remaining=parse_request(client_socket);
     }
     send_file(client_socket);
         
@@ -143,7 +149,7 @@ int Server::accept_connection(){
     //accept request to connect
     socklen_t addrlen=sizeof(clnt_addr);
     int client_socket = accept(server_socket, (struct sockaddr *)&clnt_addr, &addrlen);
-    config.offset="";
+    
     return client_socket;
 }
 void Server::open_socket(){
@@ -174,13 +180,13 @@ void Server::open_socket(){
 
 }
 void Server::create_threads(){
-  
+    
     while(true){
         
         int client_socket = accept_connection();
         
-        threads.push_back(std::thread([this, client_socket]() {manage_connection(client_socket);}));
-        threads.back().detach();
+        threads.emplace_back(std::bind(&Server::manage_connection, this, client_socket));
+        // threads.back().detach();
     }
     
     for (auto& th : threads) {
@@ -196,13 +202,19 @@ void Server::connect(){
     create_threads();
     close(server_socket);
 }
-bool Server::parse_request(){
+bool Server::parse_request(int client_socket){
     for(int i=0;i<BUFFSIZE-1;i++){
         char ch=buffer[i];
         if(ch=='\n'){
             return false;
         }
-        config.offset=config.offset+ch;
+        if(config.offsets.find(client_socket)!=config.offsets.end()){
+            config.offsets[client_socket]=config.offsets[client_socket]+ch;
+        }
+        else{
+            config.offsets[client_socket]=ch;
+        }
+        
     }
     return true;
 }

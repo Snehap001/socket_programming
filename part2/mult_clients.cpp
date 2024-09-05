@@ -4,7 +4,8 @@
 #include <map>
 #include <vector>
 #include <chrono>
-#include <thread>   
+#include <thread> 
+
 #include <fstream>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -34,17 +35,31 @@ void run_server(){
         cout<<"failed server"<<endl;
     }
 }
+void run_executable(string command) {
+    system(command.c_str());
+}
 void run_clients(int num_clients){
     
+    vector<string> commands;
     for (int i=1;i<=num_clients;i++){
-        string input_str="./client "+to_string(i);
-        const char *c=input_str.c_str();
-        int status=system(c);
-        if(status!=0){
-            cout<<"client failed"<<endl;
-        }
-
+        string s="./client "+to_string(i);
+        commands.push_back(s);
     }
+
+    vector<thread> threads;
+
+    for (auto cmd : commands) {
+        
+        threads.emplace_back(run_executable,cmd);
+    }
+
+    // Join all threads to ensure they finish
+    for (auto& th : threads) {
+        if (th.joinable()) {
+            th.join();
+        }
+    }
+
     
 }
 void MultClients::execute(){
