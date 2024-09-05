@@ -13,7 +13,6 @@
 #include <thread>
 #include <mutex>
 #include <unordered_map>
-#include <functional>
 using namespace std;
 
 struct server_config{
@@ -180,12 +179,12 @@ void Server::open_socket(){
 
 }
 void Server::create_threads(){
-    
+  
     while(true){
         
         int client_socket = accept_connection();
         
-        threads.emplace_back(std::bind(&Server::manage_connection, this, client_socket));
+        threads.push_back(std::thread([this, client_socket]() {manage_connection(client_socket);}));
         // threads.back().detach();
     }
     
