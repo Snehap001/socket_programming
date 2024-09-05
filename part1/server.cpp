@@ -64,6 +64,7 @@ void Server::load_data(const char* fname) {
             file.push_back(word);
         }
     }
+    
 }
 void Server::send_file(){
     int index=stoi(config.offset);
