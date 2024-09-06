@@ -152,7 +152,7 @@ int Server::accept_connection(){
     //accept request to connect
     socklen_t addrlen=sizeof(clnt_addr);
     int client_socket = accept(server_socket, (struct sockaddr *)&clnt_addr, &addrlen);
-    
+    config.offsets[client_socket]="";
     return client_socket;
 }
 void Server::open_socket(){
@@ -184,26 +184,29 @@ void Server::open_socket(){
 }
 void Server::create_threads(){
   
-    while(true){
+    while(threads.size()<config.n){
         
         int client_socket = accept_connection();
         
         threads.push_back(std::thread([this, client_socket]() {manage_connection(client_socket);}));
         // threads.back().detach();
+        
     }
-    
     for (auto& th : threads) {
         if (th.joinable()) {
             th.join();
         }
     }
+    close(server_socket);
+    
+    
 
 
 }
 void Server::connect(){
     open_socket();
     create_threads();
-    close(server_socket);
+    
 }
 bool Server::parse_request(int client_socket){
     for(int i=0;i<BUFFSIZE-1;i++){
@@ -211,12 +214,13 @@ bool Server::parse_request(int client_socket){
         if(ch=='\n'){
             return false;
         }
-        if(config.offsets.find(client_socket)!=config.offsets.end()){
-            config.offsets[client_socket]=config.offsets[client_socket]+ch;
-        }
-        else{
-            config.offsets[client_socket]=ch;
-        }
+        
+        config.offsets[client_socket]=config.offsets[client_socket]+ch;
+        // cout<<"config: "<<endl;
+        // for(auto it=config.offsets.begin();it!=config.offsets.end();it++){
+        //     cout<<it->first<<" "<<it->second<<endl;
+        // }
+        
         
     }
     return true;
