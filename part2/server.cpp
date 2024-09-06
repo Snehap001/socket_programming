@@ -17,6 +17,7 @@ using namespace std;
 
 struct server_config {
     int server_port, k, p, n;
+
     unordered_map<int, string> offsets;
 };
 
@@ -48,6 +49,7 @@ private:
     
 public:
     Server();
+    string test_file;
     void load_config();
     void load_data(const char*);
     void manage_connection(int client_socket);
@@ -72,6 +74,7 @@ void Server::load_config() {
     config.p = configuration["p"].asInt();
     config.k = configuration["k"].asInt();
     config.n = configuration["n"].asInt();
+    test_file=configuration["filename"].asString();
 }
 
 void Server::load_data(const char* fname) {
@@ -226,7 +229,7 @@ bool Server::parse_request(int client_socket) {
 int main() {
     Server* server = new Server();
     server->load_config();
-    server->load_data("word.txt");
+    server->load_data(server->test_file.c_str());
     server->connect();
     delete server;
 }
