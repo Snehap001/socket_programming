@@ -189,7 +189,7 @@ void Server::create_threads() {
         int client_socket = accept_connection();
         
         pthread_t thread;
-        ThreadArgs* args = new ThreadArgs{client_socket, this};  // Passing both client socket and server instance
+        ThreadArgs* args = new ThreadArgs{client_socket, this};  
 
         if (pthread_create(&thread, nullptr, manage_connection_helper, args) != 0) {
             cerr << "Error creating thread" << endl;

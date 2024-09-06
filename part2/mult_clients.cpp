@@ -63,10 +63,9 @@ void run_clients(int num_clients) {
 
     for (int i = 0; i < num_clients; i++) {
         pthread_create(&threads[i], nullptr, run_executable, static_cast<void*>(&commands[i]));
-        sleep(1);  // Sleep for 1 second to simulate staggered client start
+        sleep(1);  
     }
 
-    // Join all threads to ensure they finish
     for (auto& th : threads) {
         pthread_join(th, nullptr);
     }
@@ -75,14 +74,11 @@ void run_clients(int num_clients) {
 void MultClients::execute() {
     pthread_t server_thread;
 
-    // Start the server in a separate thread
     pthread_create(&server_thread, nullptr, run_server, nullptr);
-    sleep(3);  // Sleep for 3 seconds to give the server time to start
+    sleep(3);  
 
-    // Start the clients
     run_clients(num_clients);
 
-    // Join the server thread (optional, depending on whether you want to wait for server shutdown)
     pthread_join(server_thread, nullptr);
 }
 
