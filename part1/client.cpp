@@ -23,24 +23,23 @@ class Client{
     char* buffer;
     int communication_socket;
     string incomplete_packet;
-    int counter;
+    bool file_received;
     std::map<std::string, int> word_count;
 
     void open_connection();
-    void send_request(int offset);
-    bool parse_message();
+    void request_contents(int offset);
+    bool parse_packet();
     void read_data();
 
     public:
     Client();
     void load_config();
-    void manage_connection();
+    void download_file();
     void dump_frequency();
     ~Client();
 };
 Client::Client(){
     buffer=new char[BUFFSIZE];
-    incomplete_packet="";
 }
 Client::~Client(){
     delete buffer;
@@ -58,7 +57,6 @@ void Client::load_config() {
 
 }
 void Client::open_connection() {
-
     //creates the socket for the data connection
     if ((communication_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         std::cerr << "Socket creation error" << std::endl;
@@ -71,7 +69,6 @@ void Client::open_connection() {
         std::cerr << "Invalid address or address not supported" << std::endl;
         close(communication_socket);
     }
-
     //does the three-way handshake
     if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Connection failed" << std::endl;
@@ -79,7 +76,7 @@ void Client::open_connection() {
     }
 
 }
-void Client::send_request(int offset){
+void Client::request_contents(int offset){
 
     //sends the request containing the offset
     string request = (to_string(offset)+"\n");
@@ -94,78 +91,75 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-    cout<<buffer<<endl;
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
     }
 
 }
-bool Client::parse_message(){
+bool Client::parse_packet(){
     string word=incomplete_packet;
-    for(int i=0;i<BUFFSIZE;i++){
-        char ch=buffer[i];
-        if(ch==0){
-            break;
-        }
+    char* ptr=buffer;
+    char ch;
+    //reads the buffer till encountering null character
+    while((*ptr)!=0){
+        ch=*ptr;
+        //on reaching end of word, adds it to map
         if(ch==','){
-            if(word=="EOF"){
-                return false;
-            }
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
-                counter++;
             } 
             else {
                 word_count.insert({word,1});
-                counter++;
-            }
-            if(counter==config.k){
-                return false;
             }
             word="";
+            ptr++;
             continue;
         }
+        //on reaching end of packet, checks if it is invalid/eof
         if(ch=='\n'){
-            if(word=="$$"){
-                return false;
-            }
-            if(word=="EOF"){
+            if((word=="$$")||(word=="EOF")){
+                file_received=true;
                 return false;
             }
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
-                counter++;
             } 
             else {
                 word_count.insert({word,1});
-                counter++;
             }
-            if(counter==config.k){
-                return false;
-            }
-            word=""; 
-            continue;           
+            //indicates that the entire packet has been read
+            return false;           
         }
         word=word+ch;
+        ptr++;
     }
     incomplete_packet=word;
     return true;
 }
-void Client::manage_connection() {
+void Client::download_file() {
+    //sets up the connection
     open_connection();
-    send_request(10);
-    bool data_remaining=true;
-    counter=0;
-    while(data_remaining){
-        read_data();
-        data_remaining=parse_message();
+    file_received=false;
+    int offset=0;
+    //sends requests till the entire file is not received
+    while(!file_received){
+        request_contents(offset);
+        bool data_remaining=true;
+        //keeps reading till the entire packet has not been read
+        while(data_remaining){
+            read_data();
+            data_remaining=parse_packet();
+        }
+        offset+=config.k;
     }
+    //tells the server to close the conversation
     close(communication_socket);
 }
 void Client::dump_frequency(){
+    //writes the frequencies to file
     std::ofstream outFile("output.txt");
     if (!outFile) {
         std::cerr << "Error opening file for writing!" << std::endl;
@@ -178,7 +172,7 @@ void Client::dump_frequency(){
 int main() {
     Client *client=new Client();
     client->load_config();
-    client->manage_connection();
+    client->download_file();
     client->dump_frequency();
     delete client;
     return 0;
