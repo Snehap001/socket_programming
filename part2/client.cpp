@@ -20,7 +20,7 @@ class MultClients {
     int num_clients;
     static void* run_executable(void* arg);
     public:
-
+    string arg;
     MultClients();
     void run_clients();
 };
@@ -45,7 +45,7 @@ void* MultClients::run_executable(void* arg) {
 void MultClients::run_clients() {
     vector<string> commands;
     for (int i = 1; i <= num_clients; i++) {
-        string s = "./single_client " + to_string(i);
+        string s = "./single_client " + to_string(i)+" "+arg;
         commands.push_back(s);
     }
 
@@ -60,8 +60,19 @@ void MultClients::run_clients() {
     }
 }
 
-int main() {
+int main(int argc, char* argv[]) {
     MultClients M;
+    if(argc==2){
+        if(std::strcmp(argv[1], "plot") == 0){
+            M.arg="plot";
+        }
+        else{
+            M.arg="not_plot";
+        }
+    }
+    else{
+        M.arg="not_plot";        
+    }
     M.run_clients();
     return 0;
 }

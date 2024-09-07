@@ -34,6 +34,7 @@ class Client{
     public:
     Client(int);
     void load_config();
+    void add_time_entry(const string& filename, const vector<string>& new_row);
     void download_file();
     void dump_frequency();
     ~Client();
@@ -159,6 +160,21 @@ void Client::download_file() {
     //tells the server to close the conversation
     close(communication_socket);
 }
+void Client::add_time_entry(const string& filename, const vector<string>& new_row) {
+    ofstream file(filename, ios::app);
+    if (!file.is_open()) {
+        cerr << "Could not open the file!" << std::endl;
+        return;
+    }
+    for (size_t i = 0; i < new_row.size(); ++i) {
+        file << new_row[i];
+        if (i != new_row.size() - 1) {
+            file << ",";  
+        }
+    }
+    file << "\n"; 
+    file.close();
+}
 void Client::dump_frequency(){
     //writes the frequencies to file
     std::ofstream outFile("output_"+to_string(config.client_id)+".txt");
@@ -174,8 +190,17 @@ int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
     Client *client=new Client(id);
     client->load_config();
+    auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> duration = end - start;
+    if(argc==3){ 
+        if(std::strcmp(argv[2], "plot") == 0){
+            vector<string>entry={to_string(id),to_string(duration.count())};
+            client->add_time_entry("client_time.csv",entry);
+        }
+    }
     delete client;
     return 0;
 }
