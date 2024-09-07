@@ -9,76 +9,64 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <fcntl.h>
-#include <jsoncpp/json/json.h>  
 #include <pthread.h>
-#include <unordered_map>
-
+#include <jsoncpp/json/json.h>  // Include JSON library
 using namespace std;
-
-struct server_config {
-    int server_port, k, p, n;
-
-    unordered_map<int, string> offsets;
+struct server_config{
+    int server_port,k,p;
+    const char* fname;
 };
-
-struct ThreadArgs {
-    int client_socket;
-    class Server* server_instance;
+struct client_data{
+    char* buffer;
+    string offset;
+    int connection_socket;
+    ~client_data(){if(buffer){delete buffer;}}
 };
-
-class Server {
-private:
-    const int BUFFSIZE = 1024;
-    int MAX_CONNECTIONS = 5;
+class Server{
+    private:
+    const int BUFFSIZE=1024;   
+    const int MAX_CONNECTIONS=1;
     struct server_config config;
     struct sockaddr_in serv_addr;
-
-    char* buffer;
-    int server_socket;
+    int listening_socket;
     vector<string> file;
-    vector<pthread_t> threads;
 
-    static void* manage_connection_helper(void* args);  
-
-    void send_file(int client_socket);
-    bool parse_request(int client_socket);
+    void send_file_portion(client_data* thread_cd);
+    bool parse_request(client_data* thread_cd);
+    static void* client_handler(void * cd);
     int accept_connection();
-    void open_socket();
-    void read_request(int client_socket);
-    void create_threads();
-    
-public:
+    void open_listening_socket();
+    bool read_request(client_data* thread_cd);
+
+    public:
     Server();
-    string test_file;
     void load_config();
-    void load_data(const char*);
-    void manage_connection(int client_socket);
-    void connect();
+    void load_data();
+    void run();
     ~Server();
 };
-
-Server::Server() {
-    buffer = new char[BUFFSIZE];
-    MAX_CONNECTIONS = config.n;
+struct ThreadArgs{
+    struct client_data* cd;
+    Server* instance;
+    ~ThreadArgs(){if(cd){delete cd;}}
+};
+Server::Server(){
 }
-
-Server::~Server() {
-    delete[] buffer;
+Server::~Server(){
 }
-
 void Server::load_config() {
+    //loads the server configuration from the config file
     std::ifstream config_file("config.json", std::ifstream::binary);
     Json::Value configuration;
     config_file >> configuration;
     config.server_port = configuration["server_port"].asInt();
     config.p = configuration["p"].asInt();
     config.k = configuration["k"].asInt();
-    config.n = configuration["n"].asInt();
-    test_file=configuration["filename"].asString();
+    config.fname=(configuration["filename"]).asString().c_str();
 }
-
-void Server::load_data(const char* fname) {
-    ifstream f(fname);
+void Server::load_data() {
+    //loads the data from the file
+    ifstream f(config.fname);
     string word;
     while (getline(f, word, ',')) {
         if (!word.empty()) {
@@ -87,149 +75,165 @@ void Server::load_data(const char* fname) {
     }
     file.push_back("EOF");
 }
-
-void Server::send_file(int client_socket) {
-    int index = stoi(config.offsets[client_socket]);
-    int max_index = file.size() - 2;
-    string packet = "";
-
-    if (index >= max_index) {
-        packet = "$$\n";
-        send(client_socket, packet.c_str(), packet.size(), 0);
+void Server::send_file_portion(client_data* thread_cd){
+    int index=stoi(thread_cd->offset);
+    int max_index=file.size()-2;
+    string packet="";
+    if(index>=max_index){
+        packet="$$\n";
+        send(thread_cd->connection_socket,packet.c_str(), packet.size(), 0);   
         return;
     }
-    int num_words = config.k;
-    int packet_size = config.p;
-    int last_index = index + num_words - 1;
-    if (last_index >= max_index) {
-        last_index = file.size() - 1;
+    int num_words=config.k;
+    int packet_size=config.p;
+    int last_index=index+num_words-1;
+    if(last_index>=max_index){
+        last_index=file.size()-1;
     }
-    while (index <= last_index) {
-        packet = "";
-        int this_packet_size = 0;
-        while (this_packet_size < packet_size) {
-            if (index > last_index) {
+    while(index<=last_index){
+        packet="";
+        int this_packet_size=0;
+        while(this_packet_size<packet_size){
+            if(index>last_index){
                 break;
             }
-            packet = packet + file[index] + ",";
+            packet=packet+file[index]+",";
             this_packet_size++;
             index++;
         }
         packet.pop_back();
-        packet = packet + "\n";
-        send(client_socket, packet.c_str(), packet.size(), 0);
+        packet=packet+"\n";
+        send(thread_cd->connection_socket, packet.c_str(), packet.size(), 0);
     }
 }
+bool Server::read_request(client_data* thread_cd){
 
-void Server::read_request(int client_socket) {
-    memset(buffer, 0, BUFFSIZE);
-    ssize_t bytes_received = recv(client_socket, buffer, BUFFSIZE - 1, 0);
+    //clears the buffer
+    memset(thread_cd->buffer, 0, BUFFSIZE);
+
+    //reads the data from the receive queue into the buffer  
+    ssize_t bytes_received = recv(thread_cd->connection_socket, thread_cd->buffer, BUFFSIZE-1,0);
+    //if connection has been closed return false
+    if(bytes_received == 0){
+        return false;
+    }
     if (bytes_received < 0) {
         std::cerr << "Read error server" << std::endl;
-        close(server_socket);
-        close(client_socket);
+        close(thread_cd->connection_socket);
         exit(1);
     }
+    return true;
 }
+int Server::accept_connection(){
 
-void Server::manage_connection(int client_socket) {
-    bool request_remaining = true;
-    while (request_remaining) {
-        read_request(client_socket);
-        request_remaining = parse_request(client_socket);
-    }
-    send_file(client_socket);
-    close(client_socket);
-}
-
-int Server::accept_connection() {
-    struct sockaddr_in clnt_addr;
-    if (listen(server_socket, MAX_CONNECTIONS + 10) < 0) {
+    // wait for a connection request
+    if (listen(listening_socket, MAX_CONNECTIONS) < 0) {
         std::cerr << "Listen failed" << std::endl;
-        close(server_socket);
+        close(listening_socket);        
         exit(1);
-    }
+    }    
 
-    socklen_t addrlen = sizeof(clnt_addr);
-    int client_socket = accept(server_socket, (struct sockaddr*)&clnt_addr, &addrlen);
-    config.offsets[client_socket] = "";
-    return client_socket;
+    //accept request to connect
+    struct sockaddr_in clnt_addr;
+    socklen_t addrlen=sizeof(clnt_addr);
+    int connection_socket = accept(listening_socket, (struct sockaddr *)&clnt_addr, &addrlen);
+    return connection_socket;
 }
-
-void Server::open_socket() {
-    if ((server_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == 0) {
+void Server::open_listening_socket(){
+    // create socket
+    if ((listening_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == 0) {
         std::cerr << "Socket creation error" << std::endl;
         exit(1);
-    }
+    }  
 
-    int opt = 1;
-    if (setsockopt(server_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+    int opt=1;
+    if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
         perror("setsockopt");
         exit(EXIT_FAILURE);
     }
 
+    //creates the server address
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
     serv_addr.sin_port = htons(config.server_port);
 
-    if (bind(server_socket, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
+    // bind socket
+    if (bind(listening_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("Bind failed");
-        close(server_socket);
+        close(listening_socket);
         exit(1);
     }
 }
-
-void* Server::manage_connection_helper(void* args) {
-    ThreadArgs* thread_args = static_cast<ThreadArgs*>(args);
-    thread_args->server_instance->manage_connection(thread_args->client_socket);
-    delete thread_args;  
-    return nullptr;
-}
-
-void Server::create_threads() {
-    while (threads.size() < config.n) {
-        int client_socket = accept_connection();
-        
-        pthread_t thread;
-        ThreadArgs* args = new ThreadArgs{client_socket, this};  
-
-        if (pthread_create(&thread, nullptr, manage_connection_helper, args) != 0) {
-            cerr << "Error creating thread" << endl;
-            close(client_socket);
-        } else {
-            threads.push_back(thread);
-        }
-    }
-
-    for (auto& th : threads) {
-        pthread_join(th, nullptr);
-    }
-
-    close(server_socket);
-}
-
-void Server::connect() {
-    open_socket();
-    create_threads();
-}
-
-bool Server::parse_request(int client_socket) {
-    for (int i = 0; i < BUFFSIZE - 1; i++) {
-        char ch = buffer[i];
-        if (ch == '\n') {
+bool Server::parse_request(client_data* thread_cd){
+    char* ptr=thread_cd->buffer;
+    //reads the buffer till not encountering a null character
+    while((*ptr)!=0){
+        char ch=*ptr;
+        if(ch=='\n'){
+            //reaches end of the packet
             return false;
         }
-
-        config.offsets[client_socket] = config.offsets[client_socket] + ch;
+        thread_cd->offset=thread_cd->offset+ch;
+        ptr++;
     }
+    //has not reached end of the packet
     return true;
 }
+void* Server::client_handler(void * args){
+    
+    pthread_detach(pthread_self());
+    //has connected to the client after accepting connection 
+    bool connected=true;
 
+    ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
+    client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
+    Server* instance = static_cast<Server*>(thr_args->instance);
+
+    //entertains all requests while client chooses to remain connected
+    while(connected){
+        bool request_remaining=true;
+        thread_cd->offset="";
+        //reads the request packet entirely
+        while(request_remaining){
+            connected=instance->read_request(thread_cd);
+            if(!connected){
+                break;
+            }
+            request_remaining=instance->parse_request(thread_cd);
+        }
+        if(!connected){
+            break;
+        }
+        //sends the file from the requested offset
+        instance->send_file_portion(thread_cd);
+    }  
+    //closes the connection with the client
+    close(thread_cd->connection_socket);
+    delete thr_args;
+    return nullptr;
+}
+void Server::run(){
+    //opens the server's socket for listening to connection requests
+    open_listening_socket();
+    //listens to connection requests forever
+    while(true){
+        int connection_socket=accept_connection(); 
+        char* buffer=new char[BUFFSIZE];
+        client_data* cd = new client_data{buffer,"",connection_socket}; 
+        ThreadArgs* args=new ThreadArgs{cd,this};
+        pthread_t thread; 
+        if (pthread_create(&thread, nullptr, client_handler, args) != 0) {
+            cerr << "Error creating thread" << endl;
+            close(connection_socket);
+            continue;
+        }
+    }
+}
 int main() {
-    Server* server = new Server();
+    Server * server=new Server();
     server->load_config();
-    server->load_data(server->test_file.c_str());
-    server->connect();
+    server->load_data();
+    server->run();
     delete server;
 }
