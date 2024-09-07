@@ -12,6 +12,7 @@ build: $(CLIENT).cpp $(SERVER).cpp
 	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
 
 run: build
+	./server &
 	./client 
 
 plot: build
