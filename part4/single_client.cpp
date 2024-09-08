@@ -12,7 +12,7 @@
 using namespace std;
 struct client_config{
     string server_ip;
-    int server_port,k;
+    int server_port,k,client_id;
 };
 class Client{
 
@@ -32,14 +32,16 @@ class Client{
     void read_data();
 
     public:
-    Client();
+    Client(int);
     void load_config();
+    void add_time_entry(const string& filename, const vector<string>& new_row);
     void download_file();
     void dump_frequency();
     ~Client();
 };
-Client::Client(){
+Client::Client(int id){
     buffer=new char[BUFFSIZE];
+    config.client_id=id;
 }
 Client::~Client(){
     delete buffer;
@@ -91,7 +93,6 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-    cout<<buffer<<endl;
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
@@ -159,9 +160,24 @@ void Client::download_file() {
     //tells the server to close the conversation
     close(communication_socket);
 }
+void Client::add_time_entry(const string& filename, const vector<string>& new_row) {
+    ofstream file(filename, ios::app);
+    if (!file.is_open()) {
+        cerr << "Could not open the file!" << std::endl;
+        return;
+    }
+    for (size_t i = 0; i < new_row.size(); ++i) {
+        file << new_row[i];
+        if (i != new_row.size() - 1) {
+            file << ",";  
+        }
+    }
+    file << "\n"; 
+    file.close();
+}
 void Client::dump_frequency(){
     //writes the frequencies to file
-    std::ofstream outFile("output.txt");
+    std::ofstream outFile("output_"+to_string(config.client_id)+".txt");
     if (!outFile) {
         std::cerr << "Error opening file for writing!" << std::endl;
     }
@@ -170,11 +186,24 @@ void Client::dump_frequency(){
     }
     outFile.close();
 }
-int main() {
-    Client *client=new Client();
+int main(int argc, char* argv[]) {
+    
+    int id=stoi(argv[1]);
+
+    cout<<id<<endl;
+    Client *client=new Client(id);
     client->load_config();
+    auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
+    auto end = chrono::high_resolution_clock::now();
+    chrono::duration<double> duration = end - start;
+    if(argc==3){ 
+        if(std::strcmp(argv[2], "plot") == 0){
+            vector<string>entry={to_string(id),to_string(duration.count())};
+            client->add_time_entry("client_time.csv",entry);
+        }
+    }
     delete client;
     return 0;
 }

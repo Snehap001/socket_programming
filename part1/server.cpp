@@ -97,6 +97,7 @@ void Server::send_file_portion(){
         }
         packet.pop_back();
         packet=packet+"\n";
+  
         send(connection_socket, packet.c_str(), packet.size(), 0);
     }
 }
