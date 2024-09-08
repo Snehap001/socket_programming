@@ -14,7 +14,8 @@
 #include <jsoncpp/json/json.h>  // Include JSON library
 #include <mutex>
 #include <condition_variable>
-
+#include <unordered_map>
+#include <arpa/inet.h>
 using namespace std;
 
 struct server_config {
@@ -39,8 +40,9 @@ private:
     vector<string> file;
 
     queue<client_data*> fifo_queue;
-    vector<client_data*> round_robin_queue;
-    size_t current_rr_index;
+    unordered_map<string, queue<client_data*>> client_request_map;
+    vector<string> client_queue;  // To maintain round-robin order
+    size_t current_rr_index=0;
     mutex queue_mutex;
     condition_variable queue_cv;
     bool server_running;
@@ -53,7 +55,7 @@ private:
     static void* connection_handler(void* args);
     static void* fifo_scheduler(void* args);
     static void* round_robin_scheduler(void* args);
-
+    void add_client_request(int connection_socket);
 public:
     Server();
     void load_config();
@@ -84,6 +86,7 @@ void Server::load_config() {
     config.k = configuration["k"].asInt();
     config.n = configuration["n"].asInt();
     config.fname = (configuration["filename"]).asString().c_str();
+
 }
 
 void Server::load_data() {
@@ -137,6 +140,7 @@ bool Server::read_request(client_data* thread_cd) {
     // Reads the data from the receive queue into the buffer  
     ssize_t bytes_received = recv(thread_cd->connection_socket, thread_cd->buffer, BUFFSIZE - 1, 0);
     // If connection has been closed, return false
+
     if (bytes_received == 0) {
         return false;
     }
@@ -213,28 +217,53 @@ void* Server::connection_handler(void* args) {
     bool isFifo = handler_args->second;
     delete handler_args;  // Clean up the argument struct after unpacking
 
-    while (server->server_running) {
+    while (server->server_running) {  
         // Accept client connection
         int connection_socket = server->accept_connection();
-        char* buffer = new char[server->BUFFSIZE];
-        client_data* cd = new client_data{ buffer, "", connection_socket };
+        
 
         // Lock the queue and add the client data
         {
             lock_guard<mutex> lock(server->queue_mutex);
             if (isFifo) {
+                char* buffer = new char[server->BUFFSIZE];
+                client_data* cd = new client_data{ buffer, "", connection_socket };
                 // Add to FIFO queue
                 server->fifo_queue.push(cd);
+                server->queue_cv.notify_one();
             } else {
                 // Add to Round Robin queue
-                server->round_robin_queue.push_back(cd);
+            
+                server->add_client_request(connection_socket);
             }
         }
         // Notify the worker thread that a new client has been added
-        server->queue_cv.notify_one();
+        
     }
 
     return nullptr;
+}
+void Server::add_client_request(int connection_socket) {
+    // Get client IP and port to generate a unique ID
+    struct sockaddr_in addr;
+    socklen_t addr_len = sizeof(addr);
+    getpeername(connection_socket, (struct sockaddr*)&addr, &addr_len);
+    string client_id = inet_ntoa(addr.sin_addr) + to_string(ntohs(addr.sin_port));
+    // Create a new client_data object for the request
+    char* buffer = new char[BUFFSIZE];
+    client_data* cd = new client_data{ buffer, "", connection_socket };
+    // Lock and add the client’s request to the map and queue
+    
+    // lock_guard<mutex> lock(queue_mutex);
+    client_request_map[client_id].push(cd);
+    // If this is a new client, add them to the round-robin queue
+    if (client_request_map[client_id].size() == 1) {
+        client_queue.push_back(client_id);
+    }
+    
+    queue_cv.notify_one();
+   
+    
 }
 
 
@@ -284,19 +313,25 @@ void* Server::round_robin_scheduler(void* args) {
     Server* server = static_cast<Server*>(args);
 
     while (server->server_running) {
+        string client_id;
         client_data* cd = nullptr;
 
-        // Wait until there is a client request in the round-robin queue
+        // Wait until there is at least one client in the queue
         {
             unique_lock<mutex> lock(server->queue_mutex);
-            server->queue_cv.wait(lock, [server]() { return !server->round_robin_queue.empty(); });
+            server->queue_cv.wait(lock, [server]() { return !server->client_queue.empty(); });
 
-            // Retrieve the next client in the round-robin queue    
-            cd = server->round_robin_queue[server->current_rr_index];
-            server->current_rr_index = (server->current_rr_index + 1) % server->round_robin_queue.size();
+            // Retrieve the next client in the round-robin queue
+            client_id = server->client_queue[server->current_rr_index];
+            cd = server->client_request_map[client_id].front();  // Get the next request from the client
+
+            // Remove the processed request from the queue
+            server->client_request_map[client_id].pop();
+
+            
         }
 
-        // Process the client request
+        // Process the client request (similar to previous logic)
         bool connected = true;
         while (connected) {
             bool request_remaining = true;
@@ -316,15 +351,25 @@ void* Server::round_robin_scheduler(void* args) {
             server->send_file_portion(cd);
         }
 
-        // Remove the client from the round-robin queue
+        // After processing, check if the client still has pending requests
         {
             lock_guard<mutex> lock(server->queue_mutex);
-            server->round_robin_queue.erase(server->round_robin_queue.begin() + server->current_rr_index);
-            if (server->round_robin_queue.empty()) {
-                server->current_rr_index = 0;
-            } else if (server->current_rr_index >= server->round_robin_queue.size()) {
+            if(server->client_request_map[client_id].size()==0){
+                for( int i=0;i<server->client_queue.size();i++){
+                    if(server->client_queue[i]==client_id){
+                        server->client_queue.erase(server->client_queue.begin()+i);
+                        break;
+                    }
+                }
+            }
+            if(server->client_queue.size()!=0){
+                server->current_rr_index = (server->current_rr_index + 1) % server->client_queue.size();
+            }
+            else{
                 server->current_rr_index = 0;
             }
+            
+            
         }
 
         // Close the connection with the client
@@ -334,15 +379,16 @@ void* Server::round_robin_scheduler(void* args) {
 
     return nullptr;
 }
-
 void Server::run(bool isFifo) {
     // Opens the server's socket for listening to connection requests
     open_listening_socket();
-
+   
     // Create connection handler thread
     pthread_t connection_thread_id;
     handler_args* args = new handler_args{ this, isFifo };
+
     pthread_create(&connection_thread_id, nullptr, connection_handler, args);
+ 
     // Create FIFO scheduler thread
     if(isFifo){
         pthread_t scheduler_thread_id;
@@ -373,7 +419,7 @@ int main(int argc, char* argv[]) {
     Server* server = new Server();
     server->load_config();
     server->load_data();
-    cout<<isFifo<<endl;
+ 
     server->run(isFifo);
     delete server;
 }

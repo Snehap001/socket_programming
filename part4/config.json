@@ -1,7 +1,7 @@
 {
 	"filename" : "word.txt",
 	"k" : 10,
-	"n" : 9,
+	"n" : 29,
 	"p" : 5,
 	"server_ip" : "127.0.0.1",
 	"server_port" : 65432

@@ -17,9 +17,10 @@ class Experiment{
     private:
     Json::Value config;
     void updateConfig(int n);
-    void execute();
-    void run_server();
-    void run_multi_client();
+    void execute(bool isFifo);
+    void run_server_fifo();
+    void run_server_rr();
+    void run_multi_client(bool isFifo);
     void add_entry(const string& filename, const vector<string>& new_row);
     void write_average_to_file(const string& txt_filename, double average, int n);
     double calculate_average_time(const string& csv_filename);
@@ -29,7 +30,7 @@ class Experiment{
         config_file >> config;
         config_file.close();
     }
-    void run();
+    void run(bool isFifo);
     ~Experiment(){}   
 };
 
@@ -39,21 +40,36 @@ void Experiment::updateConfig(int n) {
     updated_config_file << config;
     updated_config_file.close();
 }
-void Experiment::run_server(){
-    int status=system("./server &");
+void Experiment::run_server_fifo(){
+    int status=system("./server fifo &");
     if(status!=0){
         cout<<"failed server"<<endl;
     }
-    else{
-        cout<<"server started"<<endl;
-    }
+
 }
-void Experiment::run_multi_client(){
-    int status=system("./client plot");
+void Experiment::run_server_rr(){
+    int status=system("./server rr &");
     if(status!=0){
-        cout<<"failed client"<<endl;
+        cout<<"failed server"<<endl;
     }
+
 }
+void Experiment::run_multi_client(bool isFifo){
+    if(isFifo){
+        int status=system("./client plot fifo");
+        if(status!=0){
+            cout<<"failed client"<<endl;
+        }
+    }
+    else{
+        int status=system("./client plot rr");
+        if(status!=0){
+            cout<<"failed client"<<endl;
+        }
+    }
+    
+}
+
 void Experiment::add_entry(const string& filename, const vector<string>& new_row) {
     ofstream file(filename, ios::app);
     for (size_t i = 0; i < new_row.size(); ++i) {
@@ -65,9 +81,15 @@ void Experiment::add_entry(const string& filename, const vector<string>& new_row
     file << "\n"; 
     file.close();
 }
-void Experiment::execute(){
-    run_server();
-    run_multi_client();
+void Experiment::execute(bool isFifo){
+    if(isFifo){
+        run_server_fifo();
+    }
+    else{
+        run_server_rr();
+    }
+ 
+    run_multi_client(isFifo);
 }
 double Experiment::calculate_average_time(const string& csv_filename) {
     ifstream csv_file(csv_filename);
@@ -103,24 +125,35 @@ void Experiment::write_average_to_file(const string& txt_filename, double averag
     txt_file << n << " "<<average<<endl;
     txt_file.close();
 }
-void Experiment:: run(){   
+void Experiment:: run(bool isFifo){   
+    string schedule="";
+    if(isFifo){
+        schedule="fifo";
+    }
+    else{
+        schedule="rr";
+    }
+    
     int max_n=32;
     vector<double> average_times;
     vector<double> confidence_intervals;
+    ofstream time_file("avg_time_per_client_"+schedule+".txt", ios::out);
+    time_file.close();
     for (int n=1;n<=max_n;n=n+4){       
-        string filename="client_time.csv";
+        string filename="client_time_"+schedule+".csv";
         ofstream file(filename, ios::out);
         file.close();
         updateConfig(n);
         vector<string>entry={"id","time"};
-        add_entry("client_time.csv",entry);
-        execute();
+        add_entry(filename,entry);
+        execute(isFifo);
         double avg=calculate_average_time(filename);
-        write_average_to_file("avg_time_per_client.txt",avg,n);
+        write_average_to_file("avg_time_per_client_"+schedule+".txt",avg,n);
     }
 }
 int main(){
     Experiment E;
-    E.run();
+    E.run(true);
+    E.run(false);
     return 0;
 }  

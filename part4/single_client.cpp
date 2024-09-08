@@ -28,7 +28,7 @@ class Client{
 
     void open_connection();
     void request_contents(int offset);
-    bool parse_packet();
+    int parse_packet();
     void read_data();
 
     public:
@@ -93,13 +93,15 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
+
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
     }
 
 }
-bool Client::parse_packet(){
+int Client::parse_packet(){
+    int words_read=0;
     string word=incomplete_packet;
     char* ptr=buffer;
     char ch;
@@ -108,6 +110,7 @@ bool Client::parse_packet(){
         ch=*ptr;
         //on reaching end of word, adds it to map
         if(ch==','){
+            words_read++;
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
@@ -123,8 +126,9 @@ bool Client::parse_packet(){
         if(ch=='\n'){
             if((word=="$$")||(word=="EOF")){
                 file_received=true;
-                return false;
+                return words_read;
             }
+            words_read++;
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
@@ -132,14 +136,15 @@ bool Client::parse_packet(){
             else {
                 word_count.insert({word,1});
             }
-            //indicates that the entire packet has been read
-            return false;           
+            word="";
+            ptr++;
+            continue;         
         }
         word=word+ch;
         ptr++;
     }
     incomplete_packet=word;
-    return true;
+    return words_read;
 }
 void Client::download_file() {
     //sets up the connection
@@ -149,13 +154,15 @@ void Client::download_file() {
     //sends requests till the entire file is not received
     while(!file_received){
         request_contents(offset);
-        bool data_remaining=true;
-        //keeps reading till the entire packet has not been read
-        while(data_remaining){
+        int words_remaining=config.k;
+        //keeps reading till the requested data has not been read
+        while((words_remaining>0)&&(!file_received)){
             read_data();
-            data_remaining=parse_packet();
+            words_remaining-=parse_packet();
         }
+      
         offset+=config.k;
+
     }
     //tells the server to close the conversation
     close(communication_socket);
@@ -187,21 +194,20 @@ void Client::dump_frequency(){
     outFile.close();
 }
 int main(int argc, char* argv[]) {
-    
     int id=stoi(argv[1]);
-
-    cout<<id<<endl;
     Client *client=new Client(id);
+
     client->load_config();
     auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
-    if(argc==3){ 
+    if(argc==4){ 
         if(std::strcmp(argv[2], "plot") == 0){
             vector<string>entry={to_string(id),to_string(duration.count())};
-            client->add_time_entry("client_time.csv",entry);
+            string schedule=argv[3];
+            client->add_time_entry("client_time_"+schedule+".csv",entry);
         }
     }
     delete client;
