@@ -1,216 +1,368 @@
 #include <iostream>
-#include <sstream>
-#include <cstring>
-#include <map>
-#include <vector>
-#include <chrono>
 #include <fstream>
+#include <sstream>
+#include <vector>
+#include <cstring>
+#include <cstdlib>
 #include <netinet/in.h>
-#include <arpa/inet.h>
+#include <sys/socket.h>
+#include <sys/mman.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+#include <fcntl.h>
+#include <pthread.h>
+#include <jsoncpp/json/json.h>  // Include JSON library
+#include <queue>
+#include <unordered_map>
+#include <condition_variable>
 using namespace std;
-struct client_config{
-    string server_ip;
-    int server_port,k,client_id;
+struct server_config{
+    int server_port,k,p;
+    const char* fname;
 };
-class Client{
-
-    private:
-    const int BUFFSIZE=1024;
-    struct client_config config;
-    struct sockaddr_in serv_addr;
+struct client_data{
     char* buffer;
-    int communication_socket;
-    string incomplete_packet;
-    bool file_received;
-    std::map<std::string, int> word_count;
-
-    void open_connection();
-    void request_contents(int offset);
-    int parse_packet();
-    void read_data();
-
-    public:
-    Client(int);
-    void load_config();
-    void add_time_entry(const string& filename, const vector<string>& new_row);
-    void download_file();
-    void dump_frequency();
-    ~Client();
+    string offset;
+    int connection_socket;
+    ~client_data(){if(buffer){delete buffer;}}
 };
-Client::Client(int id){
-    buffer=new char[BUFFSIZE];
-    config.client_id=id;
-}
-Client::~Client(){
-    delete buffer;
-}
-void Client::load_config() {
 
-    //loads the configuration of client for communication
-    ifstream config_file("config.json", std::ifstream::binary);
+class Server{
+    private:
+    const int BUFFSIZE=1024;   
+    const int MAX_CONNECTIONS=1;
+    struct server_config config;
+    struct sockaddr_in serv_addr;
+    int listening_socket;
+    vector<string> file;
+    condition_variable queue_cv;
+    queue<client_data*>fifo_queue;
+    unordered_map<int,queue<client_data*>>rr_map;
+    vector<int>rr_queue;
+    int current_rr_index=0;
+    void send_file_portion(client_data* thread_cd);
+    bool parse_request(client_data* thread_cd);
+    static void* fifo_scheduler(void * cd);
+    static void* rr_scheduler(void * cd);
+    int accept_connection();
+    void open_listening_socket();
+    bool read_request(client_data* thread_cd);
+    static void* fifo_handler(void *args);
+    static void* rr_handler(void *args);
+    public:
+    Server();
+    void load_config();
+    void load_data();
+    void run(bool isFifo);
+    ~Server();
+};
+struct ThreadArgs{
+    struct client_data* cd;
+    Server* instance;
+    ~ThreadArgs(){if(cd){delete cd;}}
+};
+Server::Server(){
+}
+Server::~Server(){
+}
+void Server::load_config() {
+    //loads the server configuration from the config file
+    std::ifstream config_file("config.json", std::ifstream::binary);
     Json::Value configuration;
     config_file >> configuration;
-    config.server_ip = configuration["server_ip"].asString();
     config.server_port = configuration["server_port"].asInt();
+    config.p = configuration["p"].asInt();
     config.k = configuration["k"].asInt();
-    config_file.close();
-
+    config.fname=(configuration["filename"]).asString().c_str();
 }
-void Client::open_connection() {
-    //creates the socket for the data connection
-    if ((communication_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
-        std::cerr << "Socket creation error" << std::endl;
-    }
-
-    //creates the server adddress
-    serv_addr.sin_family = AF_INET;
-    serv_addr.sin_port = htons(config.server_port);
-    if (inet_pton(AF_INET, config.server_ip.c_str(), &serv_addr.sin_addr) <= 0) {
-        std::cerr << "Invalid address or address not supported" << std::endl;
-        close(communication_socket);
-    }
-    //does the three-way handshake
-    if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "Connection failed" << std::endl;
-        close(communication_socket);
-    }
-
-}
-void Client::request_contents(int offset){
-
-    //sends the request containing the offset
-    string request = (to_string(offset)+"\n");
-    send(communication_socket, request.c_str(), request.size(), 0);
-    incomplete_packet="";
-
-}
-void Client::read_data(){
-
-    //clears the buffer
-    memset(buffer, 0, BUFFSIZE);
-
-    //reads the data from the receive queue into the buffer  
-    int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-
-
-    if (bytes_received < 0) {
-        std::cerr << "Read error client" << std::endl;
-        close(communication_socket);
-    }
-
-}
-int Client::parse_packet(){
-    int words_read=0;
-    string word=incomplete_packet;
-    char* ptr=buffer;
-    char ch;
-    //reads the buffer till encountering null character
-    while((*ptr)!=0){
-        ch=*ptr;
-        //on reaching end of word, adds it to map
-        if(ch==','){
-            words_read++;
-            auto it = word_count.find(word);
-            if (it != word_count.end()) {
-                word_count[word]++;
-            } 
-            else {
-                word_count.insert({word,1});
-            }
-            word="";
-            ptr++;
-            continue;
+void Server::load_data() {
+    //loads the data from the file
+    ifstream f(config.fname);
+    string word;
+    while (getline(f, word, ',')) {
+        if (!word.empty()) {
+            file.push_back(word);
         }
-        //on reaching end of packet, checks if it is invalid/eof
-        if(ch=='\n'){
-            if((word=="$$")||(word=="EOF")){
-                file_received=true;
-                return words_read;
-            }
-            words_read++;
-            auto it = word_count.find(word);
-            if (it != word_count.end()) {
-                word_count[word]++;
-            } 
-            else {
-                word_count.insert({word,1});
-            }
-            word="";
-            ptr++;
-            continue;         
-        }
-        word=word+ch;
-        ptr++;
     }
-    incomplete_packet=word;
-    return words_read;
+    file.push_back("EOF");
 }
-void Client::download_file() {
-    //sets up the connection
-    open_connection();
-    file_received=false;
-    int offset=0;
-    //sends requests till the entire file is not received
-    while(!file_received){
-        request_contents(offset);
-        int words_remaining=config.k;
-        //keeps reading till the requested data has not been read
-        while((words_remaining>0)&&(!file_received)){
-            read_data();
-            words_remaining-=parse_packet();
-        }
-      
-        offset+=config.k;
+void Server::send_file_portion(client_data* thread_cd){
+    int index=stoi(thread_cd->offset);
 
-    }
-    //tells the server to close the conversation
-    close(communication_socket);
-}
-void Client::add_time_entry(const string& filename, const vector<string>& new_row) {
-    ofstream file(filename, ios::app);
-    if (!file.is_open()) {
-        cerr << "Could not open the file!" << std::endl;
+    int max_index=file.size()-2;
+    string packet="";
+    if(index>=max_index){
+        packet="$$\n";
+        send(thread_cd->connection_socket,packet.c_str(), packet.size(), 0);   
         return;
     }
-    for (size_t i = 0; i < new_row.size(); ++i) {
-        file << new_row[i];
-        if (i != new_row.size() - 1) {
-            file << ",";  
+    int num_words=config.k;
+    int packet_size=config.p;
+    int last_index=index+num_words-1;
+    if(last_index>=max_index){
+        last_index=file.size()-1;
+    }
+    while(index<=last_index){
+        packet="";
+        int this_packet_size=0;
+        while(this_packet_size<packet_size){
+            if(index>last_index){
+                break;
+            }
+            packet=packet+file[index]+",";
+            this_packet_size++;
+            index++;
+        }
+        packet.pop_back();
+        packet=packet+"\n";
+        send(thread_cd->connection_socket, packet.c_str(), packet.size(), 0);
+    }
+}
+bool Server::read_request(client_data* thread_cd){
+
+    //clears the buffer
+    memset(thread_cd->buffer, 0, BUFFSIZE);
+
+    //reads the data from the receive queue into the buffer  
+    ssize_t bytes_received = recv(thread_cd->connection_socket, thread_cd->buffer, BUFFSIZE-1,0);
+    //if connection has been closed return false
+
+    if(bytes_received == 0){
+        return false;
+    }
+    if (bytes_received < 0) {
+        std::cerr << "Read error server" << std::endl;
+        close(thread_cd->connection_socket);
+        exit(1);
+    }
+    return true;
+}
+int Server::accept_connection(){
+
+    // wait for a connection request
+    if (listen(listening_socket, MAX_CONNECTIONS) < 0) {
+        std::cerr << "Listen failed" << std::endl;
+        close(listening_socket);        
+        exit(1);
+    }    
+
+    //accept request to connect
+    struct sockaddr_in clnt_addr;
+    socklen_t addrlen=sizeof(clnt_addr);
+    int connection_socket = accept(listening_socket, (struct sockaddr *)&clnt_addr, &addrlen);
+    return connection_socket;
+}
+void Server::open_listening_socket(){
+    // create socket
+    if ((listening_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) == 0) {
+        std::cerr << "Socket creation error" << std::endl;
+        exit(1);
+    }  
+
+    int opt=1;
+    if (setsockopt(listening_socket, SOL_SOCKET, SO_REUSEADDR | SO_REUSEPORT, &opt, sizeof(opt))) {
+        perror("setsockopt");
+        exit(EXIT_FAILURE);
+    }
+
+    //creates the server address
+    memset(&serv_addr, 0, sizeof(serv_addr));
+    serv_addr.sin_family = AF_INET;
+    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_port = htons(config.server_port);
+
+    // bind socket
+    if (bind(listening_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+        perror("Bind failed");
+        close(listening_socket);
+        exit(1);
+    }
+}
+bool Server::parse_request(client_data* thread_cd){
+    char* ptr=thread_cd->buffer;
+    //reads the buffer till not encountering a null character
+    while((*ptr)!=0){
+        char ch=*ptr;
+        if(ch=='\n'){
+            //reaches end of the packet
+            return false;
+        }
+        thread_cd->offset=thread_cd->offset+ch;
+        ptr++;
+    }
+    //has not reached end of the packet
+    return true;
+}
+void* Server::fifo_scheduler(void * args){
+    
+    pthread_detach(pthread_self());
+    //has connected to the client after accepting connection 
+    bool connected=true;
+
+    ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
+    client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
+    Server* instance = static_cast<Server*>(thr_args->instance);
+
+    //entertains all requests while client chooses to remain connected
+    while(connected){
+        bool request_remaining=true;
+        thread_cd->offset="";
+        //reads the request packet entirely
+        while(request_remaining){
+            connected=instance->read_request(thread_cd);
+            if(!connected){
+                break;
+            }
+            request_remaining=instance->parse_request(thread_cd);
+        }
+        if(!connected){
+            break;
+        }
+        client_data* cd=new client_data{thread_cd->buffer,thread_cd->offset,thread_cd->connection_socket};
+        instance->fifo_queue.push(cd);
+
+        
+    }  
+    //closes the connection with the client
+    close(thread_cd->connection_socket);
+    delete thr_args;
+    return nullptr;
+}
+void* Server::rr_scheduler(void * args){
+    
+    pthread_detach(pthread_self());
+    //has connected to the client after accepting connection 
+    bool connected=true;
+
+    ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
+    client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
+    Server* instance = static_cast<Server*>(thr_args->instance);
+
+    //entertains all requests while client chooses to remain connected
+    while(connected){
+        bool request_remaining=true;
+        thread_cd->offset="";
+        //reads the request packet entirely
+        while(request_remaining){
+            connected=instance->read_request(thread_cd);
+            if(!connected){
+                break;
+            }
+            request_remaining=instance->parse_request(thread_cd);
+        }
+        if(!connected){
+            break;
+        }
+        client_data* cd=new client_data{thread_cd->buffer,thread_cd->offset,thread_cd->connection_socket};
+        instance->rr_map[thread_cd->connection_socket].push(cd);
+        if(instance->rr_map[thread_cd->connection_socket].size()==1){
+            instance->rr_queue.push_back(thread_cd->connection_socket);
+        }
+        
+        
+    }  
+    //closes the connection with the client
+    close(thread_cd->connection_socket);
+    delete thr_args;
+    return nullptr;
+}
+void* Server::fifo_handler(void *args){
+    pthread_detach(pthread_self());
+    Server* server = static_cast<Server*>(args);
+    while(true){
+        
+        while(server->fifo_queue.empty()){
+            continue;
+        }
+        while(!server->fifo_queue.empty()){
+            server->send_file_portion(server->fifo_queue.front());
+            server->fifo_queue.pop();
         }
     }
-    file << "\n"; 
-    file.close();
+    return nullptr;
 }
-void Client::dump_frequency(){
-    //writes the frequencies to file
-    std::ofstream outFile("output_"+to_string(config.client_id)+".txt");
-    if (!outFile) {
-        std::cerr << "Error opening file for writing!" << std::endl;
+void* Server::rr_handler(void *args){
+    pthread_detach(pthread_self());
+    Server* server = static_cast<Server*>(args);
+    while(true){
+        
+        while(server->rr_queue.empty()){
+            continue;
+        }
+        while(!server->rr_queue.empty()){
+            int socket=server->rr_queue[server->current_rr_index];
+            server->send_file_portion(server->rr_map[socket].front());
+            server->rr_map[socket].pop();
+            if(server->rr_map[socket].empty()){
+                for(int i=0;i<server->rr_queue.size();i++){
+                    if(server->rr_queue[i]==socket){
+                        server->rr_queue.erase(server->rr_queue.begin()+i);
+                        break;
+                    }
+                }
+                server->rr_map.erase(socket);
+            }
+            else{
+                if(server->rr_queue.size()!=0)
+                    server->current_rr_index=(server->current_rr_index+1)%server->rr_queue.size();
+                else{
+                    server->current_rr_index=0;
+                }
+
+            }
+        }
     }
-    for (const auto& pair : word_count) {
-        outFile << pair.first << ", " << pair.second << std::endl;
+    return nullptr;
+}
+
+void Server::run(bool isFifo){
+    //opens the server's socket for listening to connection requests
+    open_listening_socket();
+    //listens to connection requests forever
+    if(isFifo){
+        pthread_t fifo_thread; 
+        
+        pthread_create(&fifo_thread, nullptr, fifo_handler,this);
     }
-    outFile.close();
+    else{
+        pthread_t rr_thread; 
+        
+        pthread_create(&rr_thread, nullptr, rr_handler,this);
+    }
+
+    while(true){
+        int connection_socket=accept_connection(); 
+        char* buffer=new char[BUFFSIZE];
+        client_data* cd = new client_data{buffer,"",connection_socket}; 
+        ThreadArgs* args=new ThreadArgs{cd,this};
+        pthread_t thread; 
+        if(isFifo){
+            if (pthread_create(&thread, nullptr, fifo_scheduler, args) != 0) {
+                cerr << "Error creating thread" << endl;
+                close(connection_socket);
+                continue;
+            }
+        }
+        else{
+            if (pthread_create(&thread, nullptr, rr_scheduler, args) != 0) {
+                cerr << "Error creating thread" << endl;
+                close(connection_socket);
+                continue;
+            }
+        }
+        
+    }
 }
 int main(int argc, char* argv[]) {
-    int id=stoi(argv[1]);
-    Client *client=new Client(id);
-
-    client->load_config();
-    auto start = chrono::high_resolution_clock::now();
-    client->download_file();
-    client->dump_frequency();
-    auto end = chrono::high_resolution_clock::now();
-    chrono::duration<double> duration = end - start;
-    if(argc==4){ 
-        if(std::strcmp(argv[2], "plot") == 0){
-            vector<string>entry={to_string(id),to_string(duration.count())};
-            string schedule=argv[3];
-            client->add_time_entry("client_time_"+schedule+".csv",entry);
-        }
+    string fifo=argv[1];
+   
+    bool isFifo=false;
+    if( fifo=="fifo"){
+        isFifo=true;
     }
-    delete client;
-    return 0;
+    Server* server = new Server();
+    server->load_config();
+    server->load_data();
+ 
+    server->run(isFifo);
+    delete server;
 }

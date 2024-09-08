@@ -39,6 +39,9 @@ void* MultClients::run_executable(void* arg) {
     if (status != 0) {
         cout << "Failed: " << command << endl;
     } 
+    else{
+        cout<<"success"<<command<<endl;
+    }
    
     return nullptr;
 }
