@@ -14,7 +14,7 @@ build: $(CLIENT).cpp $(SERVER).cpp
 run-fifo: build
 	./server fifo &
 	./client 
-run-rr:build
+run-rr: build
 	./server rr &
 	./client
 plot: build

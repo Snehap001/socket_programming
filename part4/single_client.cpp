@@ -94,6 +94,7 @@ void Client::read_data(){
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
 
+
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
