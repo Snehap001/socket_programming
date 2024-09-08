@@ -28,7 +28,7 @@ class Client{
 
     void open_connection();
     void request_contents(int offset);
-    bool parse_packet();
+    int parse_packet();
     void read_data();
 
     public:
@@ -99,7 +99,8 @@ void Client::read_data(){
     }
 
 }
-bool Client::parse_packet(){
+int Client::parse_packet(){
+    int words_read=0;
     string word=incomplete_packet;
     char* ptr=buffer;
     char ch;
@@ -108,6 +109,7 @@ bool Client::parse_packet(){
         ch=*ptr;
         //on reaching end of word, adds it to map
         if(ch==','){
+            words_read++;
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
@@ -123,8 +125,9 @@ bool Client::parse_packet(){
         if(ch=='\n'){
             if((word=="$$")||(word=="EOF")){
                 file_received=true;
-                return false;
+                return words_read;
             }
+            words_read++;
             auto it = word_count.find(word);
             if (it != word_count.end()) {
                 word_count[word]++;
@@ -132,14 +135,15 @@ bool Client::parse_packet(){
             else {
                 word_count.insert({word,1});
             }
-            //indicates that the entire packet has been read
-            return false;           
+            word="";
+            ptr++;
+            continue;         
         }
         word=word+ch;
         ptr++;
     }
     incomplete_packet=word;
-    return true;
+    return words_read;
 }
 void Client::download_file() {
     //sets up the connection
@@ -149,11 +153,11 @@ void Client::download_file() {
     //sends requests till the entire file is not received
     while(!file_received){
         request_contents(offset);
-        bool data_remaining=true;
-        //keeps reading till the entire packet has not been read
-        while(data_remaining){
+        int words_remaining=config.k;
+        //keeps reading till the requested data has not been read
+        while((words_remaining>0)&&(!file_received)){
             read_data();
-            data_remaining=parse_packet();
+            words_remaining-=parse_packet();
         }
         offset+=config.k;
     }
