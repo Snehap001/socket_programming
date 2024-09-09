@@ -1,0 +1,222 @@
+accept
+4
+conn4
+acceptaccept
+accept
+accept
+4
+conn4
+accept
+accept
+accept
+fifo_scheduler
+0
+offset 0
+relaxed,sad,jump,lion,bike
+
+root,branch,sad,work,elephant
+
+10
+offset 10
+chair,yellow,tulip,write,grass
+
+beach,ocean,subway,write,drawer
+
+20
+offset 20
+boat,orbit,brown,red,scooter
+
+creek,cat,pond,flower,fish
+
+30
+offset 30
+peach,kiwi,planet,bush,plum
+
+scared,rug,peach,seed,happy
+
+te,grass
+
+beach,ocean,subway,write,drawer
+
+20
+20
+offset 20
+boat,orbit,brown,red,scooter
+
+creek,cat,pond,flower,fish
+
+off5
+conn5
+accept
+fifo_scheduler
+0
+offset 0
+relaxed,sad,jump,lion,bike
+
+root,branch,sad,work,elephant
+
+10
+offset 10
+chair,yellow,tulip,write,grass
+
+beach,ocean,subway,write,drawer
+
+20
+offset 20
+boat,orbit,brown,red,scooter
+
+creek,cat,pond,flower,fish
+
+30
+offset 30
+peach,kiwi,planet,bush,plum
+
+scared,rug,peach,seed,happy
+
+4
+conn4
+accept
+fifo_scheduler
+0
+offset 0
+relaxed,sad,jump,lion,bike
+
+root,branch,sad,work,elephant
+
+10
+offset 10
+chair,yellow,tulip,write,grass
+
+beach,ocean,subway,write,drawer
+
+20
+offset 20
+boat,orbit,brown,red,scooter
+
+creek,cat,pond,flower,fish
+
+30
+offset 30
+peach,kiwi,planet,bush,plum
+
+scared,rug,peach,seed,happy
+
+40
+offset 40
+grass,apple,branch,drink,dandelion
+
+elephant,surprised,surprised,dance,excited
+
+50
+offset 50
+taccept
+5
+conn5
+accept
+accept
+accept
+fifo_scheduler
+0
+offset 0
+relaxed,sad,jump,lion,bike
+
+root,branch,sad,work,elephant
+
+10
+offset 10
+chair,yellow,tulip,write,grass
+
+beach,ocean,subway,write,drawer
+
+20
+offset 20
+boat,orbit,brown,red,scooter
+
+creek,cat,pond,flower,fish
+
+30
+offset 30
+peach,kiwi,planet,bush,plum
+
+scared,rug,peach,seed,happy
+
+40
+offset 40
+grass,apple,branch,drink,dandelion
+
+elephant,surprised,surprised,dance,excited
+
+50
+offset 50
+tiger,ship,ship,white,tiger
+
+subway,marigold,black,milk,mouse
+
+60
+offset 60
+pond,work,melon,tree,poppy
+
+table,black,scooter,write,pond
+
+70
+offset 70
+angry,orbit,rose,orchid,pink
+
+surprised,violet,plum,nebula,bread
+
+80
+offset 80
+lake,fox,milk,branch,orange
+
+kiwi,poppy,harbor,elephant,bored
+
+90
+offset 90
+train,meat,bread,branch,sunflower
+
+plane,lily,fruit,meat,melon
+
+100
+offset 100
+cosmos,tulip,pear,bored,scared
+
+subway,purple,relaxed,fruit,sun
+
+110
+offset 110
+play,drawer,red,orbit,poppy
+
+angry,plum,plane,seed,lake
+
+120
+offset 120
+ship,vine,apple,grape,ship
+
+bike,tiger,rug,think,waterfall
+
+130
+offset 130
+seed,moon,cheese,orbit,waterfall
+
+river,tree,confused,rug,root
+
+140
+offset 140
+play,angry,yellow,cat,tulip
+
+run,tree,ship,river,leaf
+
+EOF
+
+terfall
+
+river,tree,confused,rug,root
+
+140
+offset 140
+play,angry,yellow,cat,tulip
+
+run,tree,ship,river,leaf
+
+EOF
+

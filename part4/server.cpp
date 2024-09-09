@@ -147,11 +147,14 @@ int Server::accept_connection(){
         close(listening_socket);        
         exit(1);
     }    
+    cout<<"accept"<<endl;
 
     //accept request to connect
     struct sockaddr_in clnt_addr;
     socklen_t addrlen=sizeof(clnt_addr);
     int connection_socket = accept(listening_socket, (struct sockaddr *)&clnt_addr, &addrlen);
+   
+    cout<<connection_socket<<endl;
     return connection_socket;
 }
 void Server::open_listening_socket(){
@@ -211,7 +214,7 @@ void* Server::fifo_scheduler(void * args){
         thread_cd->offset="";
         //reads the request packet entirely
         while(request_remaining){
-            cout<<"req"<<endl;
+         
             connected=instance->read_request(thread_cd);
             if(!connected){
                 break;
@@ -289,11 +292,10 @@ void* Server::fifo_handler(void *args){
         
        {    
             unique_lock<mutex> lock(server->queue_mutex);
-            cout<<"loope"<<endl;
+       
 
             server->queue_cv.wait(lock, [server]() { return !server->fifo_queue.empty(); });
-            cout<<"loop"<<endl;
-          
+       
             cd=server->fifo_queue.front();
             server->fifo_queue.pop();
        }
@@ -302,10 +304,7 @@ void* Server::fifo_handler(void *args){
             delete cd;
         }
             
-        
-            
-        
-        
+     
     }
     return nullptr;
 }
@@ -359,7 +358,6 @@ void Server::run(bool isFifo){
     //listens to connection requests forever
     if(isFifo){
         pthread_t fifo_thread; 
-        cout<<"fifo start"<<endl;
         if (pthread_create(&fifo_thread, nullptr, fifo_handler,this) != 0) {
                 cerr << "Error creating thread" << endl;
                 
@@ -375,7 +373,6 @@ void Server::run(bool isFifo){
     }
  
     while(true){
-        cout<<"connection establish"<<endl;
         int connection_socket=accept_connection(); 
         cout<<"conn"<<connection_socket<<endl;
         char* buffer=new char[BUFFSIZE];
