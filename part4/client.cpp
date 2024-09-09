@@ -39,10 +39,6 @@ void* MultClients::run_executable(void* arg) {
     if (status != 0) {
         cout << "Failed: " << command << endl;
     } 
-    else{
-        cout<<"success"<<command<<endl;
-    }
-   
     return nullptr;
 }
 
@@ -66,10 +62,9 @@ void MultClients::run_clients() {
 
 int main(int argc, char* argv[]) {
     MultClients M;
-    if(argc==3){
-        if(std::strcmp(argv[1], "plot") == 0  ){
-            string schedule=argv[2];
-            M.arg="plot "+schedule;
+    if(argc==2){
+        if(std::strcmp(argv[1], "plot") == 0){
+            M.arg="plot";
         }
         else{
             M.arg="not_plot";
