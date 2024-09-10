@@ -104,6 +104,7 @@ void Server::send_file_portion(client_data* thread_cd){
         }
         packet.pop_back();
         packet=packet+"\n";
+        
         send(thread_cd->connection_socket, packet.c_str(), packet.size(), 0);
     }
 }

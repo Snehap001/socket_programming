@@ -168,7 +168,7 @@ void Client::download_file() {
 }
 void Client::dump_frequency(){
     //writes the frequencies to file
-    std::ofstream outFile("output.txt");
+    std::ofstream outFile("client.txt");
     if (!outFile) {
         std::cerr << "Error opening file for writing!" << std::endl;
     }

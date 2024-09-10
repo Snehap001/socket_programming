@@ -183,13 +183,15 @@ void Client::add_time_entry(const string& filename, const vector<string>& new_ro
 }
 void Client::dump_frequency(){
     //writes the frequencies to file
-    std::ofstream outFile("output_"+to_string(config.client_id)+".txt");
+    std::ofstream outFile("client_"+to_string(config.client_id)+".txt");
     if (!outFile) {
-        std::cerr << "Error opening file for writing!" << std::endl;
+        std::cerr << "Error opening file for writing!" << endl;
     }
     for (const auto& pair : word_count) {
-        outFile << pair.first << ", " << pair.second << std::endl;
+        outFile << pair.first << ", " << pair.second << endl;
+        cout<<pair.first << ", " << pair.second << endl;
     }
+    
     outFile.close();
 }
 int main(int argc, char* argv[]) {
