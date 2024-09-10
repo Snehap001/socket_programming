@@ -10,7 +10,8 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
-#include <jsoncpp/json/json.h>  // Include JSON library
+#include "json.hpp"
+using json = nlohmann::json;  // Include JSON library
 using namespace std;
 struct server_config{
     int server_port,k,p;
@@ -57,12 +58,12 @@ Server::~Server(){
 void Server::load_config() {
     //loads the server configuration from the config file
     std::ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
+    json configuration;
     config_file >> configuration;
-    config.server_port = configuration["server_port"].asInt();
-    config.p = configuration["p"].asInt();
-    config.k = configuration["k"].asInt();
-    config.fname=(configuration["filename"]).asString().c_str();
+    config.server_port = configuration["server_port"].get<int>();
+    config.p = configuration["p"].get<int>();
+    config.k = configuration["k"].get<int>();
+    config.fname=configuration["input_file"].get<string>().c_str();
 }
 void Server::load_data() {
     //loads the data from the file

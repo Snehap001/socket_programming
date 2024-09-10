@@ -8,7 +8,8 @@ build: $(CLIENT).cpp $(SERVER).cpp
 	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
-
+make server:./server &
+make client: ./client
 run: build
 	./server &
 	./client 

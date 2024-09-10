@@ -9,7 +9,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+#include "json.hpp"
+using json = nlohmann::json;
 #include <math.h>
 #include <numeric>
 
@@ -27,10 +28,10 @@ class MultClients {
 
 MultClients::MultClients() {
     ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
+    json configuration;
     config_file >> configuration;
 
-    num_clients = configuration["n"].asInt();
+    num_clients = configuration["num_clients"].get<int>();
     config_file.close();
 }
 void* MultClients::run_executable(void* arg) {
@@ -39,6 +40,10 @@ void* MultClients::run_executable(void* arg) {
     if (status != 0) {
         cout << "Failed: " << command << endl;
     } 
+    else{
+        cout<<"success"<<command<<endl;
+    }
+   
     return nullptr;
 }
 
@@ -62,9 +67,10 @@ void MultClients::run_clients() {
 
 int main(int argc, char* argv[]) {
     MultClients M;
-    if(argc==2){
-        if(std::strcmp(argv[1], "plot") == 0){
-            M.arg="plot";
+    if(argc==3){
+        if(std::strcmp(argv[1], "plot") == 0  ){
+            string schedule=argv[2];
+            M.arg="plot "+schedule;
         }
         else{
             M.arg="not_plot";

@@ -9,14 +9,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+
 #include <math.h>
 #include <numeric>
+#include "json.hpp"
+using json = nlohmann::json;
 using namespace std;
 
 class Experiment{
     public:
-    Json::Value config;
+    json config;
     Experiment(){
         ifstream config_file("config.json", ifstream::binary);
         

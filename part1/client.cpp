@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+
+#include "json.hpp"
+using json = nlohmann::json;
 using namespace std;
 struct client_config{
     string server_ip;
@@ -46,15 +48,16 @@ Client::~Client(){
 }
 void Client::load_config() {
 
-    //loads the configuration of client for communication
-    ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
-    config_file >> configuration;
-    config.server_ip = configuration["server_ip"].asString();
-    config.server_port = configuration["server_port"].asInt();
-    config.k = configuration["k"].asInt();
-    config_file.close();
+    
+    std::ifstream config_file("config.json", std::ifstream::binary);
+    json configuration;
+    config_file >> configuration; // Parse the JSON content from the file
 
+    config.server_ip = configuration["server_ip"].get<std::string>();
+    config.server_port = configuration["server_port"].get<int>();
+    config.k = configuration["k"].get<int>();
+
+    config_file.close(); 
 }
 void Client::open_connection() {
     //creates the socket for the data connection
@@ -91,7 +94,7 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-    cout<<buffer<<endl;
+
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);

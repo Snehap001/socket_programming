@@ -8,7 +8,8 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+#include "json.hpp"
+using json = nlohmann::json;
 using namespace std;
 struct client_config{
     string server_ip;
@@ -50,11 +51,11 @@ void Client::load_config() {
 
     //loads the configuration of client for communication
     ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
+    json configuration;
     config_file >> configuration;
-    config.server_ip = configuration["server_ip"].asString();
-    config.server_port = configuration["server_port"].asInt();
-    config.k = configuration["k"].asInt();
+    config.server_ip = configuration["server_ip"].get<string>();
+    config.server_port = configuration["server_port"].get<int>();
+    config.k = configuration["k"].get<int>();
     config_file.close();
 
 }
@@ -93,6 +94,7 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
+
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
@@ -159,7 +161,9 @@ void Client::download_file() {
             read_data();
             words_remaining-=parse_packet();
         }
+      
         offset+=config.k;
+
     }
     //tells the server to close the conversation
     close(communication_socket);
@@ -193,16 +197,18 @@ void Client::dump_frequency(){
 int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
     Client *client=new Client(id);
+
     client->load_config();
     auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
-    if(argc==3){ 
+    if(argc==4){ 
         if(std::strcmp(argv[2], "plot") == 0){
             vector<string>entry={to_string(id),to_string(duration.count())};
-            client->add_time_entry("client_time.csv",entry);
+            string schedule=argv[3];
+            client->add_time_entry("client_time_"+schedule+".csv",entry);
         }
     }
     delete client;

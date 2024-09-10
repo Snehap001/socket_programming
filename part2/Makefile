@@ -11,6 +11,8 @@ build: $(CLIENT).cpp $(SERVER).cpp
 	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
 
+make server:./server &
+make client: ./client
 run: build
 	./server &
 	./client 

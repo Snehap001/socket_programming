@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+#include "json.hpp"
+using json = nlohmann::json;
+
 using namespace std;
 struct client_config{
     string server_ip;
@@ -50,11 +52,11 @@ void Client::load_config() {
 
     //loads the configuration of client for communication
     ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
+    json configuration;
     config_file >> configuration;
-    config.server_ip = configuration["server_ip"].asString();
-    config.server_port = configuration["server_port"].asInt();
-    config.k = configuration["k"].asInt();
+    config.server_ip = configuration["server_ip"].get<string>();
+    config.server_port = configuration["server_port"].get<int>();
+    config.k = configuration["k"].get<int>();
     config_file.close();
 
 }

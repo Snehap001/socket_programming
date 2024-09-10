@@ -8,14 +8,16 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+
 #include <math.h>
 #include <numeric>
+#include "json.hpp"
+using json = nlohmann::json;
 using namespace std;
 
 class Experiment{
     private:
-    Json::Value config;
+    json config;
     void updateConfig(int n);
     void execute();
     void run_server();
@@ -34,7 +36,8 @@ class Experiment{
 };
 
 void Experiment::updateConfig(int n) {
-    config["n"] = n;
+    
+    config["num_clients"] = n;
     ofstream updated_config_file("config.json");
     updated_config_file << config;
     updated_config_file.close();

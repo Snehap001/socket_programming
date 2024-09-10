@@ -9,9 +9,11 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
-#include <jsoncpp/json/json.h>
+
 #include <math.h>
 #include <numeric>
+#include "json.hpp"
+using json = nlohmann::json;
 
 using namespace std;
 
@@ -26,12 +28,15 @@ class MultClients {
 };
 
 MultClients::MultClients() {
-    ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
-    config_file >> configuration;
+    std::ifstream config_file("config.json", std::ifstream::binary);
+    json configuration;
+    config_file >> configuration; // Parse the JSON content from the file
 
-    num_clients = configuration["n"].asInt();
-    config_file.close();
+    num_clients = configuration["num_clients"].get<int>();
+
+    config_file.close(); 
+
+
 }
 void* MultClients::run_executable(void* arg) {
     string command = *(static_cast<string*>(arg));

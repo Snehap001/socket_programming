@@ -12,7 +12,8 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <map>
-#include <jsoncpp/json/json.h>  // Include JSON library
+#include "json.hpp"
+using json = nlohmann::json;  // Include JSON library
 using namespace std;
 enum policy{fifo,round_robin};
 struct server_config{
@@ -84,13 +85,13 @@ void Server::set_policy(string policy_choice){
 void Server::load_config() {
     //loads the server configuration from the config file
     std::ifstream config_file("config.json", std::ifstream::binary);
-    Json::Value configuration;
+    json configuration;
     config_file >> configuration;
-    config.server_port = configuration["server_port"].asInt();
-    config.p = configuration["p"].asInt();
-    config.k = configuration["k"].asInt();
-    config.n = configuration["n"].asInt();
-    config.fname=configuration["filename"].asString();
+    config.server_port = configuration["server_port"].get<int>();
+    config.p = configuration["p"].get<int>();
+    config.k = configuration["k"].get<int>();
+    config.n = configuration["num_clients"].get<int>();
+    config.fname=configuration["input_file"].get<string>();
 }
 void Server::load_data() {
     //loads the data from the file
