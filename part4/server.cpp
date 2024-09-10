@@ -11,12 +11,13 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <pthread.h>
+#include <map>
 #include <jsoncpp/json/json.h>  // Include JSON library
 using namespace std;
 enum policy{fifo,round_robin};
 struct server_config{
-    int server_port,k,p;
-    const char* fname;
+    int server_port,k,p,n;
+    string fname;
     policy pol;
 };
 struct client_data{
@@ -38,15 +39,21 @@ class Server{
     int listening_socket;
     vector<string> file;
     queue<request> fifo_queue;
-    pthread_mutex_t locker;
+    pthread_mutex_t queue_locker;
+    map<int,queue<int>>rr_map;
+    pthread_mutex_t map_locker;
+    vector<int>rr_classes;
+    pthread_mutex_t rr_class_locker;
 
     void send_file_portion(request r);
     bool parse_request(client_data* thread_cd);
-    static void* fifo_client_handler(void * cd);
     int accept_connection();
     void open_listening_socket();
     bool read_request(client_data* thread_cd);
     static void* fifo_queue_handler(void * args);
+    static void* fifo_client_handler(void * cd);
+    static void* rr_map_handler(void* args);
+    static void* rr_client_handler(void* cd);
 
     public:
     Server();
@@ -69,8 +76,9 @@ void Server::set_policy(string policy_choice){
     if(policy_choice=="fifo"){
         config.pol=fifo;
     }
-    else if(policy_choice=="round_robin"){
+    else if(policy_choice=="rr"){
         config.pol=round_robin;
+        rr_classes.resize(config.n, -1);
     }
 }
 void Server::load_config() {
@@ -81,11 +89,12 @@ void Server::load_config() {
     config.server_port = configuration["server_port"].asInt();
     config.p = configuration["p"].asInt();
     config.k = configuration["k"].asInt();
-    config.fname=(configuration["filename"]).asString().c_str();
+    config.n = configuration["n"].asInt();
+    config.fname=configuration["filename"].asString();
 }
 void Server::load_data() {
     //loads the data from the file
-    ifstream f(config.fname);
+    ifstream f(config.fname.c_str());
     string word;
     while (getline(f, word, ',')) {
         if (!word.empty()) {
@@ -97,8 +106,7 @@ void Server::load_data() {
 void Server::send_file_portion(request r){
     int index=r.offset;
     int max_index=file.size()-2;
-    string packet="";
-    if(index>=max_index){
+    string packet="";if(index>=max_index){
         packet="$$\n";
         send(r.connection_socket,packet.c_str(), packet.size(), 0);   
         return;
@@ -158,15 +166,46 @@ int Server::accept_connection(){
     int connection_socket = accept(listening_socket, (struct sockaddr *)&clnt_addr, &addrlen);
     return connection_socket;
 }
+void* Server::rr_map_handler(void * args){
+    pthread_detach(pthread_self()); 
+    Server* instance=static_cast<Server*>(args);
+    int class_index=0;
+    int num_connections=instance->config.n;
+    int connection_socket;
+    while(true){
+        pthread_mutex_lock(&(instance->rr_class_locker)); 
+        connection_socket=instance->rr_classes[class_index];
+        pthread_mutex_unlock(&(instance->rr_class_locker));
+        class_index=(class_index+1)%num_connections;
+        if(connection_socket==(-1)){
+            continue;            
+        }
+        pthread_mutex_lock(&(instance->map_locker));
+        bool empty=(instance->rr_map[connection_socket]).empty();
+        pthread_mutex_unlock(&(instance->map_locker)); 
+        if(empty){
+            continue;
+        }
+        pthread_mutex_lock(&(instance->map_locker));
+        int request_offset=instance->rr_map[connection_socket].front();
+        instance->rr_map[connection_socket].pop();
+        pthread_mutex_unlock(&(instance->map_locker));
+
+        request r;
+        r.connection_socket=connection_socket;
+        r.offset=request_offset;
+        instance->send_file_portion(r);
+    }
+}
 void* Server::fifo_queue_handler(void * args){
     pthread_detach(pthread_self());
     Server* instance=static_cast<Server*>(args);
     while(true){
 
         //checks if there are any requests queued up
-        pthread_mutex_lock(&(instance->locker));
+        pthread_mutex_lock(&(instance->queue_locker));
         bool empty=instance->fifo_queue.empty();
-        pthread_mutex_unlock(&(instance->locker));
+        pthread_mutex_unlock(&(instance->queue_locker));
 
         //if there are no requests, wait and check again.
         if(empty){
@@ -174,10 +213,10 @@ void* Server::fifo_queue_handler(void * args){
         }
 
         //if there are requests, entertain them.
-        pthread_mutex_lock(&(instance->locker));
+        pthread_mutex_lock(&(instance->queue_locker));
         request req_to_serv=instance->fifo_queue.front();
         instance->fifo_queue.pop();
-        pthread_mutex_unlock(&(instance->locker));
+        pthread_mutex_unlock(&(instance->queue_locker));
 
         instance->send_file_portion(req_to_serv);   
     }
@@ -250,16 +289,79 @@ void* Server::fifo_client_handler(void * args){
             break;
         }
 
-        //creates new request corresponding to the client adn offset
+        //creates new request corresponding to the client and offset
         request r;
         r.offset=stoi(thread_cd->offset);
         r.connection_socket=thread_cd->connection_socket;
 
         //push the request into the fifo queue
-        pthread_mutex_lock(&(instance->locker));
+        pthread_mutex_lock(&(instance->queue_locker));
         instance->fifo_queue.push(r);
-        pthread_mutex_unlock(&(instance->locker));
+        pthread_mutex_unlock(&(instance->queue_locker));
     }  
+    //closes the connection with the client
+    close(thread_cd->connection_socket);
+    delete thr_args;
+    return nullptr;
+}
+void* Server::rr_client_handler(void * args){
+    pthread_detach(pthread_self());
+    //has connected to the client after accepting connection 
+    bool connected=true;
+
+    ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
+    client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
+    Server* instance = static_cast<Server*>(thr_args->instance);
+    int i;
+    //inserts the client into the map   
+    pthread_mutex_lock(&(instance->map_locker));
+    (instance->rr_map)[thread_cd->connection_socket]=queue<int>();
+    pthread_mutex_unlock(&(instance->map_locker));
+
+    pthread_mutex_lock(&(instance->rr_class_locker));
+    for(i=0;i<(instance->rr_classes.size());i++){
+        if(instance->rr_classes[i]==-1){
+            instance->rr_classes[i]=thread_cd->connection_socket;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&(instance->rr_class_locker));
+
+    //entertains all requests while client chooses to remain connected
+    while(connected){
+        bool request_remaining=true;
+        thread_cd->offset="";
+        //reads the request packet entirely
+        while(request_remaining){
+            connected=instance->read_request(thread_cd);
+            if(!connected){
+                break;
+            }
+            request_remaining=instance->parse_request(thread_cd);
+        }
+        if(!connected){
+            break;
+        }
+        //adds the requested offset to the client's queue
+        pthread_mutex_lock(&(instance->map_locker));    
+        (instance->rr_map)[thread_cd->connection_socket].push(stoi(thread_cd->offset));
+        pthread_mutex_unlock(&(instance->map_locker));
+    }  
+
+    //deletes the client from the map
+    pthread_mutex_lock(&(instance->map_locker));    
+    (instance->rr_map).erase(thread_cd->connection_socket);
+    pthread_mutex_unlock(&(instance->map_locker)); 
+
+    pthread_mutex_lock(&(instance->rr_class_locker));
+    for(int i=0;i<(instance->rr_classes.size());i++){
+        if((instance->rr_classes[i])==(thread_cd->connection_socket)){
+            instance->rr_classes[i]=-1;
+            break;
+        }
+    }
+    pthread_mutex_unlock(&(instance->rr_class_locker));
+    
     //closes the connection with the client
     close(thread_cd->connection_socket);
     delete thr_args;
@@ -269,10 +371,19 @@ void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
 
-    //thread which entertains requests in the fifo order.
-    pthread_t queue_thread;
-    if (pthread_create(&queue_thread, nullptr, fifo_queue_handler, this) != 0) {
-        cerr << "Error creating thread" << endl;
+    if(config.pol==fifo){
+        //thread which entertains requests in the fifo order.
+        pthread_t fifo_thread;
+        if (pthread_create(&fifo_thread, nullptr, fifo_queue_handler, this) != 0) {
+            cerr << "Error creating thread" << endl;
+        }
+    }
+    else if(config.pol==round_robin){
+        //thread which entertains requests in the round robin order.
+        pthread_t rr_thread;
+        if (pthread_create(&rr_thread, nullptr, rr_map_handler, this) != 0) {
+            cerr << "Error creating thread" << endl;
+        }        
     }
     //listens to connection requests forever
     while(true){
@@ -282,18 +393,27 @@ void Server::run(){
         ThreadArgs* args=new ThreadArgs{cd,this};
         //thread which actually connects to the client
         pthread_t connection_thread; 
-        if (pthread_create(&connection_thread, nullptr, fifo_client_handler, args) != 0) {
-            cerr << "Error creating thread" << endl;
-            close(connection_socket);
-            continue;
+        if(config.pol==fifo){
+            if (pthread_create(&connection_thread, nullptr, fifo_client_handler, args) != 0) {
+                cerr << "Error creating thread" << endl;
+                close(connection_socket);
+                continue;
+            }
+        }
+        else if(config.pol==round_robin){
+            if (pthread_create(&connection_thread, nullptr, rr_client_handler, args) != 0) {
+                cerr << "Error creating thread" << endl;
+                close(connection_socket);
+                continue;
+            }
         }
     }
 }
 int main(int argc, char* argv[]) {
-    // string policy_choice=argv[1];
+    string policy_choice=argv[1];
     Server * server=new Server();
     server->load_config();
-    server->set_policy("fifo");
+    server->set_policy(policy_choice);
     server->load_data();
     server->run();
     delete server;
