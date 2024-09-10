@@ -227,53 +227,7 @@ bool Server::parse_request(client_data* thread_cd){
     //has not reached end of the packet
     return true;
 }
-<<<<<<< HEAD
-void* Server::fifo_scheduler(void * args){
-    cout<<"fifo_scheduler"<<endl;
-    pthread_detach(pthread_self());
-    //has connected to the client after accepting connection 
-    bool connected=true;
-
-    ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
-    client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
-    Server* instance = static_cast<Server*>(thr_args->instance);
-
-    //entertains all requests while client chooses to remain connected
-    while(connected){
-        bool request_remaining=true;
-        thread_cd->offset="";
-        //reads the request packet entirely
-        while(request_remaining){
-         
-            connected=instance->read_request(thread_cd);
-            if(!connected){
-                break;
-            }
-            request_remaining=instance->parse_request(thread_cd);
-        }
-        if(!connected){
-            break;
-        }
-        {
-            lock_guard<mutex> lock(instance->queue_mutex);
-            char* buffer=new char[instance->BUFFSIZE];
-            cout<<thread_cd->offset<<endl;
-            client_data* cd=new client_data{buffer,thread_cd->offset,thread_cd->connection_socket};
-            instance->fifo_queue.push(cd);
-        }
-            instance->queue_cv.notify_one();
-        
-        
-    }  
-    //closes the connection with the client
-    close(thread_cd->connection_socket);
-    delete thr_args;
-    return nullptr;
-}
-void* Server::rr_scheduler(void * args){
-=======
 void* Server::fifo_client_handler(void * args){
->>>>>>> 9ab86022d79c4af8fb2335d89e0b2e2ea49a64b9
     
     pthread_detach(pthread_self());
     //has connected to the client after accepting connection 
@@ -314,79 +268,7 @@ void* Server::fifo_client_handler(void * args){
     delete thr_args;
     return nullptr;
 }
-<<<<<<< HEAD
-void* Server::fifo_handler(void *args){
-    pthread_detach(pthread_self());
-    Server* server = static_cast<Server*>(args);
-    client_data *cd=nullptr;
-    while(true){
-        
-       {    
-            unique_lock<mutex> lock(server->queue_mutex);
-       
-
-            server->queue_cv.wait(lock, [server]() { return !server->fifo_queue.empty(); });
-       
-            cd=server->fifo_queue.front();
-            server->fifo_queue.pop();
-       }
-        if(cd!=nullptr){
-            server->send_file_portion(cd);
-            delete cd;
-        }
-            
-     
-    }
-    return nullptr;
-}
-void* Server::rr_handler(void *args){
-    pthread_detach(pthread_self());
-    Server* server = static_cast<Server*>(args);
-    int socket;;
-    client_data *cd=nullptr;
-    while(true){
-        
-           { 
-            unique_lock<mutex> lock(server->queue_mutex);
-            server->queue_cv.wait(lock, [server]() { return !server->rr_queue.empty(); });
-        
-            int socket=server->rr_queue[server->current_rr_index];
-            cd=server->rr_map[socket].front();
-            server->rr_map[socket].pop();
-            
-            
-            
-            if(server->rr_map[socket].empty()){
-                for(int i=0;i<server->rr_queue.size();i++){
-                    if(server->rr_queue[i]==socket){
-                        server->rr_queue.erase(server->rr_queue.begin()+i);
-                        break;
-                    }
-                }
-                server->rr_map.erase(socket);
-            }
-            else{
-                if(server->rr_queue.size()!=0)
-                    server->current_rr_index=(server->current_rr_index+1)%server->rr_queue.size();
-                else{
-                    server->current_rr_index=0;
-                }
-
-            }}
-            if(cd!=nullptr){
-                server->send_file_portion(cd);
-                delete cd;
-            }
-            
-        
-    }
-    return nullptr;
-}
-
-void Server::run(bool isFifo){
-=======
 void Server::run(){
->>>>>>> 9ab86022d79c4af8fb2335d89e0b2e2ea49a64b9
     //opens the server's socket for listening to connection requests
     open_listening_socket();
 
@@ -396,25 +278,6 @@ void Server::run(){
         cerr << "Error creating thread" << endl;
     }
     //listens to connection requests forever
-<<<<<<< HEAD
-    if(isFifo){
-        pthread_t fifo_thread; 
-        if (pthread_create(&fifo_thread, nullptr, fifo_handler,this) != 0) {
-                cerr << "Error creating thread" << endl;
-                
-        }
-    }
-    else{
-        pthread_t rr_thread; 
-        
-        if (pthread_create(&rr_thread, nullptr, rr_handler,this) != 0) {
-                cerr << "Error creating thread" << endl;
-                
-        }
-    }
- 
-=======
->>>>>>> 9ab86022d79c4af8fb2335d89e0b2e2ea49a64b9
     while(true){
         int connection_socket=accept_connection(); 
         char* buffer=new char[BUFFSIZE];
