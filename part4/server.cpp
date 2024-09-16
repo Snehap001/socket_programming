@@ -13,7 +13,7 @@
 #include <pthread.h>
 #include <map>
 #include "json.hpp"
-using json = nlohmann::json;  // Include JSON library
+using json = nlohmann::json;
 using namespace std;
 enum policy{fifo,round_robin};
 struct server_config{
@@ -47,7 +47,8 @@ class Server{
     pthread_mutex_t rr_class_locker;
 
     void send_file_portion(request r);
-    bool parse_request(client_data* thread_cd);
+    void parse_offset(client_data* thread_cd,queue<int>&offsets);
+    void parse_request(client_data* thread_cd,queue<request>&requests);
     int accept_connection();
     void open_listening_socket();
     bool read_request(client_data* thread_cd);
@@ -86,12 +87,12 @@ void Server::load_config() {
     //loads the server configuration from the config file
     std::ifstream config_file("config.json", std::ifstream::binary);
     json configuration;
-    config_file >> configuration;
+    config_file >> configuration; // Parse the JSON content from the file
     config.server_port = configuration["server_port"].get<int>();
-    config.p = configuration["p"].get<int>();
+    config.p = configuration["p"].get<std::string>();
     config.k = configuration["k"].get<int>();
     config.n = configuration["num_clients"].get<int>();
-    config.fname=configuration["input_file"].get<string>();
+    config.fname=configuration["input_file"].get<std::string>();
 }
 void Server::load_data() {
     //loads the data from the file
@@ -249,20 +250,44 @@ void Server::open_listening_socket(){
         exit(1);
     }
 }
-bool Server::parse_request(client_data* thread_cd){
+void Server::parse_offset(client_data* thread_cd,queue<int>&offsets){
     char* ptr=thread_cd->buffer;
     //reads the buffer till not encountering a null character
     while((*ptr)!=0){
         char ch=*ptr;
         if(ch=='\n'){
+            
             //reaches end of the packet
-            return false;
+            offsets.push(stoi(thread_cd->offset));
+            thread_cd->offset="";
+            ptr++;
+            continue;
         }
         thread_cd->offset=thread_cd->offset+ch;
         ptr++;
     }
-    //has not reached end of the packet
-    return true;
+}
+void Server::parse_request(client_data* thread_cd,queue<request>&requests){
+    char* ptr=thread_cd->buffer;
+    //reads the buffer till not encountering a null character
+    while((*ptr)!=0){
+        char ch=*ptr;
+        if(ch=='\n'){
+
+            //reaches end of the packet
+
+            request r;
+            r.offset=stoi(thread_cd->offset);
+            r.connection_socket=thread_cd->connection_socket;
+            requests.push(r);
+
+            thread_cd->offset="";
+            ptr++;
+            continue;
+        }
+        thread_cd->offset=thread_cd->offset+ch;
+        ptr++;
+    }
 }
 void* Server::fifo_client_handler(void * args){
     
@@ -273,31 +298,17 @@ void* Server::fifo_client_handler(void * args){
     ThreadArgs* thr_args=static_cast<ThreadArgs*>(args);
     client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
     Server* instance = static_cast<Server*>(thr_args->instance);
+    
+    thread_cd->offset="";
 
     //entertains all requests while client chooses to remain connected
     while(connected){
-        bool request_remaining=true;
-        thread_cd->offset="";
-        //reads the request packet entirely
-        while(request_remaining){
-            connected=instance->read_request(thread_cd);
-            if(!connected){
-                break;
-            }
-            request_remaining=instance->parse_request(thread_cd);
-        }
+        connected=instance->read_request(thread_cd);
         if(!connected){
             break;
         }
-
-        //creates new request corresponding to the client and offset
-        request r;
-        r.offset=stoi(thread_cd->offset);
-        r.connection_socket=thread_cd->connection_socket;
-
-        //push the request into the fifo queue
         pthread_mutex_lock(&(instance->queue_locker));
-        instance->fifo_queue.push(r);
+        instance->parse_request(thread_cd,(instance->fifo_queue));
         pthread_mutex_unlock(&(instance->queue_locker));
     }  
     //closes the connection with the client
@@ -314,6 +325,7 @@ void* Server::rr_client_handler(void * args){
     client_data* thread_cd = static_cast<client_data*>(thr_args->cd);
     Server* instance = static_cast<Server*>(thr_args->instance);
     int i;
+
     //inserts the client into the map   
     pthread_mutex_lock(&(instance->map_locker));
     (instance->rr_map)[thread_cd->connection_socket]=queue<int>();
@@ -327,25 +339,17 @@ void* Server::rr_client_handler(void * args){
         }
     }
     pthread_mutex_unlock(&(instance->rr_class_locker));
+    thread_cd->offset="";
 
     //entertains all requests while client chooses to remain connected
     while(connected){
-        bool request_remaining=true;
-        thread_cd->offset="";
-        //reads the request packet entirely
-        while(request_remaining){
-            connected=instance->read_request(thread_cd);
-            if(!connected){
-                break;
-            }
-            request_remaining=instance->parse_request(thread_cd);
-        }
+        connected=instance->read_request(thread_cd);
         if(!connected){
             break;
         }
-        //adds the requested offset to the client's queue
-        pthread_mutex_lock(&(instance->map_locker));    
-        (instance->rr_map)[thread_cd->connection_socket].push(stoi(thread_cd->offset));
+        queue <int>&offsets=(instance->rr_map)[thread_cd->connection_socket];
+        pthread_mutex_lock(&(instance->map_locker));  
+        instance->parse_offset(thread_cd,offsets); 
         pthread_mutex_unlock(&(instance->map_locker));
     }  
 
