@@ -2,21 +2,25 @@
 #include <sstream>
 #include <cstring>
 #include <map>
+#include <random> 
 #include <vector>
 #include <chrono>
 #include <fstream>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <unistd.h>
+#include <set>
 #include "json.hpp"
-#include <random>
-#include <math.h>
 using json = nlohmann::json;
-
 using namespace std;
+
+enum protocol{slotted_aloha,beb,sensing_beb};
+enum status{BUSY,IDLE};
 struct client_config{
     string server_ip;
-    int server_port,k,T,client_id;
+    int server_port,k,client_id;
+    protocol prot;
+    int T,n;
 };
 class Client{
 
@@ -29,16 +33,25 @@ class Client{
     string incomplete_packet;
     bool file_received;
     std::map<std::string, int> word_count;
+    default_random_engine generator; 
 
     void open_connection();
     void request_contents(int offset);
-    int parse_packet();
+    void wait_till_idle();
+    void wait_for_slot(double prob);
+    void add_to_map(multiset<string> & words);
+    void parse_packet(int & words_remaining,multiset<string> & words);
+    status parse_status();
     void read_data();
-    void reattempt(int num_attempts);
+    void backoff(int num_attempts);
+    void download_file_sensing_beb();
+    void download_file_beb();
+    void download_file_slotted_aloha();
 
     public:
     Client(int);
     void load_config();
+    void set_protocol(string p);
     void add_time_entry(const string& filename, const vector<string>& new_row);
     void download_file();
     void dump_frequency();
@@ -51,6 +64,17 @@ Client::Client(int id){
 Client::~Client(){
     delete buffer;
 }
+void Client::set_protocol(string p){
+    if(p=="SLOTTED_ALOHA"){
+        config.prot=slotted_aloha;
+    }
+    else if(p=="BEB"){
+        config.prot=beb;
+    }
+    else if(p=="SENSING_BEB"){
+        config.prot=sensing_beb;
+    }
+}
 void Client::load_config() {
 
     //loads the configuration of client for communication
@@ -60,7 +84,8 @@ void Client::load_config() {
     config.server_ip = configuration["server_ip"].get<string>();
     config.server_port = configuration["server_port"].get<int>();
     config.k = configuration["k"].get<int>();
-    config.T = configuration["T"].get<int>();
+    config.T=configuration["T"].get<double>();
+    config.n=configuration["num_clients"].get<int>();
     config_file.close();
 
 }
@@ -99,15 +124,36 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-  
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
     }
 
 }
-int Client::parse_packet(){
-    int words_read=0;
+status Client::parse_status(){
+    char* ptr=buffer;
+    string stat="";
+    //reads the buffer till not encountering a null character
+    while((*ptr)!=0){
+        char ch=*ptr;
+        if(ch=='\n'){
+            if(stat=="IDLE"){
+                return IDLE;
+            }
+            else if (stat=="BUSY"){
+                return BUSY;
+            }
+            else{
+                //throw error
+                return BUSY;
+            }
+        }
+        stat=stat+ch;
+        ptr++;
+    }
+    return BUSY;
+}
+void Client::parse_packet(int & words_remaining,multiset<string> & words){
     string word=incomplete_packet;
     char* ptr=buffer;
     char ch;
@@ -116,14 +162,8 @@ int Client::parse_packet(){
         ch=*ptr;
         //on reaching end of word, adds it to map
         if(ch==','){
-            words_read++;
-            auto it = word_count.find(word);
-            if (it != word_count.end()) {
-                word_count[word]++;
-            } 
-            else {
-                word_count.insert({word,1});
-            }
+            words_remaining--;
+            words.insert(word);
             word="";
             ptr++;
             continue;
@@ -131,21 +171,16 @@ int Client::parse_packet(){
         //on reaching end of packet, checks if it is invalid/eof
         if(ch=='\n'){
             if(word=="HUH!"){
-              
-                return -1;
+                words_remaining=-2;
+                return;
             }
             if((word=="$$")||(word=="EOF")){
                 file_received=true;
-                return words_read;
+                words_remaining=-1;
+                return;
             }
-            words_read++;
-            auto it = word_count.find(word);
-            if (it != word_count.end()) {
-                word_count[word]++;
-            } 
-            else {
-                word_count.insert({word,1});
-            }
+            words_remaining--;
+            words.insert(word);
             word="";
             ptr++;
             continue;         
@@ -154,55 +189,137 @@ int Client::parse_packet(){
         ptr++;
     }
     incomplete_packet=word;
-    return words_read;
 }
-void Client::reattempt(int num_attempts){
-    int N=pow(2,num_attempts)-1;
-    double time=rand()%N;
-    sleep(time*config.T);
-
+void Client::add_to_map(multiset<string> & words){
+    for (auto & word: words){
+        auto it = word_count.find(word);
+        if (it != word_count.end()) {
+            word_count[word]++;
+        } 
+        else {
+            word_count.insert({word,1});
+        }
+    }
 }
-void Client::download_file() {
+void Client::download_file(){
+    switch(config.prot){
+        case slotted_aloha:
+            download_file_slotted_aloha();
+            break;
+        case beb:
+            download_file_beb();
+            break;
+        case sensing_beb:
+            download_file_sensing_beb();
+            break;
+    }
+}
+void Client::wait_till_idle(){
+    status s=BUSY;
+    int waiting_period=(int)((config.T)/1000);
+    while(s==BUSY){
+        send(communication_socket, "BUSY?\n", 6, 0); 
+        read_data();   
+        s=parse_status();
+        if(s==BUSY){
+            sleep(waiting_period);
+        }
+    }
+}
+void Client::wait_for_slot(double prob){
+    uniform_real_distribution<double> distribution (0.0,1.0); 
+    generator.seed(time(0));
+    while(true){
+        int now = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+        if((now%config.T)==0){
+            double toss=distribution(generator);
+            if(toss<=prob){
+                return;
+            }
+        }
+    }
+}
+void Client::download_file_sensing_beb() {
+   //sets up the connection
+    open_connection();
+    file_received=false;
+    int offset=0,words_remaining=0,num_attempts=0;
+    //sends requests till the entire file is not received
+    while(!file_received){
+        wait_till_idle();
+        request_contents(offset);
+        words_remaining=config.k;
+        multiset <string> words;
+        //keeps reading till the requested data has not been read
+        while(words_remaining>0){
+            read_data();
+            parse_packet(words_remaining,words);
+        }
+        if(words_remaining>=(-1)){
+            add_to_map(words);
+            num_attempts=0;
+            offset+=config.k;
+            continue;
+        }
+        num_attempts++;
+        backoff(num_attempts);
+    }
+    //tells the server to close the conversation
+    close(communication_socket);
+}
+void Client::download_file_beb() {
     //sets up the connection
     open_connection();
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received
+    int words_remaining;
     int num_attempts=0;
-
     while(!file_received){
-        cout<<config.client_id<<" "<<offset<<endl;
         request_contents(offset);
-        int words_remaining=config.k;
+        words_remaining=config.k;
+        multiset <string> words;
         //keeps reading till the requested data has not been read
-        bool huh_msg=false;
-        while((words_remaining>0)&&(!file_received)){
+        while(words_remaining>0){
             read_data();
-            int val=parse_packet();
-            if(val==-1){
-                huh_msg=true;
-                break;
-            }
-            else{
-                words_remaining-=val;
-            }
-            
+            parse_packet(words_remaining,words);
         }
-        // cout<<"huh: "<<huh_msg<<endl;
-        if(huh_msg){
-            num_attempts+=1;
-            reattempt(num_attempts);
-            // cout<<"again"<<endl;
-            // 
-
-        }
-        else{
-            offset+=config.k;
+        if(words_remaining>=(-1)){
+            add_to_map(words);
             num_attempts=0;
+            offset+=config.k;
+            continue;
         }
-        cout<<"offset "<<offset<<endl;
-        cout<<"file received "<<file_received<<endl;
-        
+        num_attempts++;
+        backoff(num_attempts);
+    }
+    //tells the server to close the conversation
+    close(communication_socket);
+}
+void Client::download_file_slotted_aloha() {
+    //sets up the connection
+    open_connection();
+    file_received=false;
+    int offset=0;
+    //sends requests till the entire file is not received
+    int words_remaining;
+    double prob=(1/((double)(config.n)));
+    time_t slot;
+    while(!file_received){
+        wait_for_slot(prob);
+        request_contents(offset);
+        words_remaining=config.k;
+        multiset <string> words;
+        //keeps reading till the requested data has not been read
+        while(words_remaining>0){
+            read_data();
+            parse_packet(words_remaining,words);
+        }
+        if(words_remaining>=(-1)){
+            add_to_map(words);
+            offset+=config.k;
+        }
     }
     //tells the server to close the conversation
     close(communication_socket);
@@ -222,6 +339,13 @@ void Client::add_time_entry(const string& filename, const vector<string>& new_ro
     file << "\n"; 
     file.close();
 }
+void Client::backoff(int num_attempts){
+    int N=pow(2,num_attempts)-1;
+    srand(static_cast<unsigned int>(time(0)));
+    double random_i=(rand())%N;
+    int waiting_period=(int)((random_i*config.T)/1000);
+    sleep(waiting_period);
+}
 void Client::dump_frequency(){
     //writes the frequencies to file
     std::ofstream outFile("client_"+to_string(config.client_id)+".txt");
@@ -230,7 +354,6 @@ void Client::dump_frequency(){
     }
     for (const auto& pair : word_count) {
         outFile << pair.first << ", " << pair.second << endl;
-        // cout<<pair.first << ", " << pair.second << endl;
     }
     
     outFile.close();
@@ -239,6 +362,7 @@ int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
     Client *client=new Client(id);
     client->load_config();
+    client->set_protocol("SLOTTED_ALOHA");
     auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
