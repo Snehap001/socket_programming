@@ -49,7 +49,9 @@ void* MultClients::run_executable(void* arg) {
 
 void MultClients::run_clients() {
     vector<string> commands;
-    for (int i = 1; i <= num_clients; i++) {
+    string s = "./rogue_client 1" +arg;
+    commands.push_back(s);
+    for (int i = 2; i <= num_clients; i++) {
         string s = "./single_client " + to_string(i)+" "+arg;
         commands.push_back(s);
     }

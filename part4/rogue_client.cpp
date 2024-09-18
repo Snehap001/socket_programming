@@ -34,21 +34,21 @@ class RogueClient{
     void read_data();
 
     public:
-    Client(int);
+    RogueClient(int);
     void load_config();
     void add_time_entry(const string& filename, const vector<string>& new_row);
     void download_file();
     void dump_frequency();
-    ~Client();
+    ~RogueClient();
 };
-Client::Client(int id){
+RogueClient::RogueClient(int id){
     buffer=new char[BUFFSIZE];
     config.client_id=id;
 }
-Client::~Client(){
+RogueClient::~RogueClient(){
     delete buffer;
 }
-void Client::load_config() {
+void RogueClient::load_config() {
 
     //loads the configuration of client for communication
     ifstream config_file("config.json", std::ifstream::binary);
@@ -60,7 +60,7 @@ void Client::load_config() {
     config_file.close();
 
 }
-void Client::open_connection() {
+void RogueClient::open_connection() {
     //creates the socket for the data connection
     if ((communication_socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)) < 0) {
         std::cerr << "Socket creation error" << std::endl;
@@ -80,7 +80,7 @@ void Client::open_connection() {
     }
 
 }
-void Client::request_contents(int offset){
+void RogueClient::request_contents(int offset){
 
     //sends the request containing the offset
     string request = (to_string(offset)+"\n");
@@ -88,7 +88,7 @@ void Client::request_contents(int offset){
     incomplete_packet="";
 
 }
-void Client::read_data(){
+void RogueClient::read_data(){
 
     //clears the buffer
     memset(buffer, 0, BUFFSIZE);
@@ -101,7 +101,7 @@ void Client::read_data(){
     }
 
 }
-void Client::parse_packet(int & words_remaining){
+void RogueClient::parse_packet(int & words_remaining){
     string word=incomplete_packet;
     char* ptr=buffer;
     char ch;
@@ -146,7 +146,7 @@ void Client::parse_packet(int & words_remaining){
     }
     incomplete_packet=word;
 }
-void Client::download_file() {
+void RogueClient::download_file() {
     //sets up the connection
     open_connection();
     file_received=false;
@@ -167,7 +167,7 @@ void Client::download_file() {
     //tells the server to close the conversation
     close(communication_socket);
 }
-void Client::add_time_entry(const string& filename, const vector<string>& new_row) {
+void RogueClient::add_time_entry(const string& filename, const vector<string>& new_row) {
     ofstream file(filename, ios::app);
     if (!file.is_open()) {
         cerr << "Could not open the file!" << std::endl;
@@ -182,7 +182,7 @@ void Client::add_time_entry(const string& filename, const vector<string>& new_ro
     file << "\n"; 
     file.close();
 }
-void Client::dump_frequency(){
+void RogueClient::dump_frequency(){
     //writes the frequencies to file
     std::ofstream outFile("client_"+to_string(config.client_id)+".txt");
     if (!outFile) {

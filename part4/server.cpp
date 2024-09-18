@@ -89,7 +89,7 @@ void Server::load_config() {
     json configuration;
     config_file >> configuration; // Parse the JSON content from the file
     config.server_port = configuration["server_port"].get<int>();
-    config.p = configuration["p"].get<std::string>();
+    config.p = configuration["p"].get<int>();
     config.k = configuration["k"].get<int>();
     config.n = configuration["num_clients"].get<int>();
     config.fname=configuration["input_file"].get<std::string>();
