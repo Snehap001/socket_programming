@@ -4,24 +4,31 @@
 #include <vector>
 #include <cstring>
 #include <cstdlib>
+#include <ctime>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <sys/mman.h>
 #include <unistd.h>
-#include <fcntl.h>
 #include <pthread.h>
 #include "json.hpp"
 using json = nlohmann::json;  // Include JSON library
 using namespace std;
+enum status{BUSY,IDLE};
 struct server_config{
     int server_port,k,p;
     const char* fname;
 };
 struct client_data{
     char* buffer;
-    string offset;
+    string request;
     int connection_socket;
+    time_t req_t_stamp;
     ~client_data(){if(buffer){delete buffer;}}
+};
+struct state{
+    status serv_stat;
+    int curr_client;
+    time_t strt_time,lst_coll_time;
 };
 class Server{
     private:
@@ -29,20 +36,17 @@ class Server{
     const int MAX_CONNECTIONS=1;
     struct server_config config;
     struct sockaddr_in serv_addr;
-    pthread_mutex_t locker;
-    bool state=0;                     // IDLE=0 and BUSY=1
     int listening_socket;
-    int current_socket;
+    state st;
     vector<string> file;
-    int huh_var_1=0;
-    int huh_var_2=0;
+
     void send_file_portion(client_data* thread_cd);
-    bool parse_request(client_data* thread_cd);
+    void parse_request(client_data* thread_cd);
     static void* client_handler(void * cd);
     int accept_connection();
     void open_listening_socket();
     bool read_request(client_data* thread_cd);
-    static void* huh_handler(void *cd);
+
     public:
     Server();
     void load_config();
@@ -56,6 +60,7 @@ struct ThreadArgs{
     ~ThreadArgs(){if(cd){delete cd;}}
 };
 Server::Server(){
+    st.serv_stat=IDLE;
 }
 Server::~Server(){
 }
@@ -81,19 +86,20 @@ void Server::load_data() {
     file.push_back("EOF");
 }
 void Server::send_file_portion(client_data* thread_cd){
-    int index=stoi(thread_cd->offset);
+    int index=stoi(thread_cd->request);
     int max_index=file.size()-2;
     string packet="";
-    cout<<"index is "<<index<<endl;
     if(index>=max_index){
-        packet="$$\n";
-        if(huh_var_2){
-            // pthread_mutex_lock(&locker);
-            huh_var_2=0;
-            // pthread_mutex_unlock(&locker);
+        if((thread_cd->req_t_stamp)<(st.lst_coll_time)){
+            send(thread_cd->connection_socket, "HUH!\n", 5, 0);
+            st.serv_stat=IDLE;
+            st.curr_client=-1;
             return;
         }
+        packet="$$\n";
         send(thread_cd->connection_socket,packet.c_str(), packet.size(), 0);   
+        st.serv_stat=IDLE;
+        st.curr_client=-1;
         return;
     }
     int num_words=config.k;
@@ -115,14 +121,14 @@ void Server::send_file_portion(client_data* thread_cd){
         }
         packet.pop_back();
         packet=packet+"\n";
-        if(huh_var_2){
-            // pthread_mutex_lock(&locker);
-            huh_var_2=0;
-            // pthread_mutex_unlock(&locker);
+        if((thread_cd->req_t_stamp)<(st.lst_coll_time)){
+            send(thread_cd->connection_socket, "HUH!\n", 5, 0);
             return;
         }
         send(thread_cd->connection_socket, packet.c_str(), packet.size(), 0);
     }
+    st.serv_stat=IDLE;
+    st.curr_client=-1;
 }
 bool Server::read_request(client_data* thread_cd){
 
@@ -130,7 +136,6 @@ bool Server::read_request(client_data* thread_cd){
     memset(thread_cd->buffer, 0, BUFFSIZE);
 
     //reads the data from the receive queue into the buffer  
-   
     ssize_t bytes_received = recv(thread_cd->connection_socket, thread_cd->buffer, BUFFSIZE-1,0);
     //if connection has been closed return false
     if(bytes_received == 0){
@@ -141,22 +146,6 @@ bool Server::read_request(client_data* thread_cd){
         close(thread_cd->connection_socket);
         exit(1);
     }
-    if(state==1){
-        // pthread_mutex_lock(&locker);
-        string packet="HUH!\n";
-        send(thread_cd->connection_socket, packet.c_str(), packet.size(), 0);
-        huh_var_1=1;
-        huh_var_2=1;
-        // pthread_mutex_unlock(&locker);
-        return false;
-    }
-    if(state==0){
-        // pthread_mutex_lock(&locker);
-        state=1;
-        current_socket=thread_cd->connection_socket;
-        // pthread_mutex_unlock(&locker);
-    }
-    
     return true;
 }
 int Server::accept_connection(){
@@ -200,20 +189,18 @@ void Server::open_listening_socket(){
         exit(1);
     }
 }
-bool Server::parse_request(client_data* thread_cd){
+void Server::parse_request(client_data* thread_cd){
     char* ptr=thread_cd->buffer;
     //reads the buffer till not encountering a null character
     while((*ptr)!=0){
         char ch=*ptr;
         if(ch=='\n'){
             //reaches end of the packet
-            return false;
+            return;
         }
-        thread_cd->offset=thread_cd->offset+ch;
+        thread_cd->request=thread_cd->request+ch;
         ptr++;
     }
-    //has not reached end of the packet
-    return true;
 }
 void* Server::client_handler(void * args){
     
@@ -227,54 +214,60 @@ void* Server::client_handler(void * args){
 
     //entertains all requests while client chooses to remain connected
     while(connected){
-        
-        bool request_remaining=true;
-        thread_cd->offset="";
+
         //reads the request packet entirely
-        while(request_remaining){
-            connected=instance->read_request(thread_cd);
-            if(!connected){
-                break;
-            }
-            request_remaining=instance->parse_request(thread_cd);
-        }
+        thread_cd->request="";
+        connected=instance->read_request(thread_cd);
+        instance->parse_request(thread_cd);
         if(!connected){
             break;
         }
-        cout<<thread_cd->connection_socket<<": "<<thread_cd->offset<<endl;
+
+        if((thread_cd->request)=="BUSY?"){
+            switch((instance->st).serv_stat){
+                case IDLE:
+                send(thread_cd->connection_socket, "IDLE\n", 5, 0);
+                break;
+                case BUSY:
+                send(thread_cd->connection_socket, "BUSY\n", 5, 0);
+                break;
+            }
+            continue;
+        }   
         //sends the file from the requested offset
-        instance->send_file_portion(thread_cd);
-        instance->state=0;
+        time_t now;
+        switch((instance->st).serv_stat)
+        {
+            case IDLE:
+
+            (instance->st).serv_stat=BUSY;
+            (instance->st).curr_client=thread_cd->connection_socket;
+            now=time(0);
+            (instance->st).strt_time=now;
+            thread_cd->req_t_stamp=now;
+            instance->send_file_portion(thread_cd); 
+            
+            break;
+
+            case BUSY:
+
+            (instance->st).serv_stat=IDLE;
+            (instance->st).curr_client=-1;
+            (instance->st).lst_coll_time=time(0);
+            send(thread_cd->connection_socket, "HUH!\n", 5, 0);
+
+            break;
+        }
+
     }  
     //closes the connection with the client
     close(thread_cd->connection_socket);
     delete thr_args;
     return nullptr;
 }
-void* Server::huh_handler(void * args){
-    pthread_detach(pthread_self());
-    Server* instance = static_cast<Server*>(args);
-    while(true){
-        if(instance->huh_var_1){
-            pthread_mutex_lock(&(instance->locker));
-            string packet="HUH!\n";
-            send(instance->current_socket, packet.c_str(), packet.size(), 0);
-            instance->huh_var_1=0;
-            instance->state=0;
-            instance->current_socket=-1;
-            pthread_mutex_unlock(&(instance->locker));
-        }
-        
-    }
-
-}
 void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
-    pthread_t huh_thread;
-    if (pthread_create(&huh_thread, nullptr, huh_handler, this) != 0) {
-            cerr << "Error creating thread" << endl;
-    }
     //listens to connection requests forever
     while(true){
         int connection_socket=accept_connection(); 
