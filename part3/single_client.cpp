@@ -216,7 +216,7 @@ void Client::download_file(){
 }
 void Client::wait_till_idle(){
     status s=BUSY;
-    int waiting_period=(int)((config.T)/1000);
+    unsigned int waiting_period=((config.T)*1000);
 
     while(s==BUSY){
         
@@ -225,7 +225,7 @@ void Client::wait_till_idle(){
         s=parse_status();
       
         if(s==BUSY){
-            sleep(waiting_period);
+            usleep(waiting_period);
         }
     }
 }
@@ -344,8 +344,8 @@ void Client::backoff(int num_attempts){
     int N=pow(2,num_attempts)-1;
     srand(static_cast<unsigned int>(time(0)));
     double random_i=(rand())%N;
-    int waiting_period=(int)((random_i*config.T)/1000);
-    sleep(waiting_period);
+    unsigned int waiting_period=((random_i*config.T)*1000);
+    usleep(waiting_period);
 }
 void Client::dump_frequency(){
     //writes the frequencies to file
@@ -379,7 +379,6 @@ int main(int argc, char* argv[]) {
     if(argc==4){ 
         
         vector<string>entry={to_string(duration.count())};
-        cout<<entry[0]<<endl;
         client->add_time_entry("client_time.csv",entry);
         
     

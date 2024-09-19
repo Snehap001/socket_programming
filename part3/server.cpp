@@ -15,7 +15,7 @@ using json = nlohmann::json;  // Include JSON library
 using namespace std;
 enum status{BUSY,IDLE};
 struct server_config{
-    int server_port,k,p;
+    int server_port,k,p,n;
     const char* fname;
 };
 struct client_data{
@@ -46,8 +46,7 @@ class Server{
     int accept_connection();
     void open_listening_socket();
     bool read_request(client_data* thread_cd);
-    pthread_mutex_t connected_locker;
-    int client_connected;
+ 
     public:
     Server();
     void load_config();
@@ -74,7 +73,7 @@ void Server::load_config() {
     config.p = configuration["p"].get<int>();
     config.k = configuration["k"].get<int>();
     config.fname=configuration["input_file"].get<string>().c_str();
-    client_connected=configuration["num_clients"].get<int>();
+    config.n = configuration["num_clients"].get<int>();
 }
 void Server::load_data() {
     //loads the data from the file
@@ -265,31 +264,17 @@ void* Server::client_handler(void * args){
     }  
     //closes the connection with the client
     close(thread_cd->connection_socket);
-    pthread_mutex_lock(&(instance->connected_locker));
-    instance->client_connected--;
-    pthread_mutex_unlock(&(instance->connected_locker));
     delete thr_args;
     return nullptr;
 }
-void killProcessesOnPort(int port) {
-    std::string command = "lsof -t -i:" + std::to_string(port) + " | xargs kill -9";
-    int ret = system(command.c_str());
-    
-    if (ret == -1) {
-        std::cerr << "Error executing command to kill processes on port " << port << ": " << strerror(errno) << std::endl;
-    } else {
-        std::cout << "Killed processes on port " << port << std::endl;
-    }
-}
+
 void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
     //listens to connection requests forever
-    bool keep_running=true;
-    while(keep_running){
-        pthread_mutex_lock(&(connected_locker));
-        keep_running=client_connected>0;
-        pthread_mutex_unlock(&(connected_locker));
+    int num_client_connected=config.n;
+    while(num_client_connected>0){
+        
         int connection_socket=accept_connection(); 
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 

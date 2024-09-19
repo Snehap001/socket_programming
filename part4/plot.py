@@ -11,12 +11,12 @@ def read_file(filename):
     with open(filename,'r') as file:
         for line in file:
             n,avg=line.split()
-            data.append((int(n)),float(avg))
+            data.append(((int(n)),float(avg)))
     return data
 def write_combined(file1,file2,output):
     with open(output,'w') as outfile:
         for (n1, avg1), (_, avg2)in zip(file1, file2):
-            outfile.write(f"{n1} {avg1} {avg2} \n")
+            outfile.write(f"{n1} {avg1} {avg2}\n")
 file1='avg_time_fifo.txt'
 file2='avg_time_rr.txt'
 f1_data=read_file(file1)

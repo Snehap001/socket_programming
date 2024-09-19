@@ -11,7 +11,7 @@ def read_file(filename):
     with open(filename,'r') as file:
         for line in file:
             n,avg=line.split()
-            data.append((int(n)),float(avg))
+            data.append(((int(n)),float(avg)))
     return data
 def write_combined(file1,file2,file3,output):
     with open(output,'w') as outfile:

@@ -46,8 +46,8 @@ class Server{
     vector<int>rr_classes;
     pthread_mutex_t rr_class_locker;
 
-    // pthread_mutex_t connected_locker;
-    // int client_connected=0;
+    pthread_mutex_t connected_locker;
+    int client_connected=0;
     void send_file_portion(request r);
     void parse_offset(client_data* thread_cd,queue<int>&offsets);
     void parse_request(client_data* thread_cd,queue<request>&requests);
@@ -96,7 +96,7 @@ void Server::load_config() {
     config.n = configuration["num_clients"].get<int>();
     config.fname=configuration["input_file"].get<std::string>();
     
-    // client_connected=config.n;
+    client_connected=config.n;
 }
 void Server::load_data() {
     //loads the data from the file
@@ -180,9 +180,9 @@ void* Server::rr_map_handler(void * args){
     int connection_socket;
     bool keep_running=true;
     while(keep_running){
-        // pthread_mutex_lock(&(instance->connected_locker));
-        // keep_running=instance->client_connected>0;
-        // pthread_mutex_unlock(&(instance->connected_locker));
+        pthread_mutex_lock(&(instance->connected_locker));
+        keep_running=instance->client_connected>0;
+        pthread_mutex_unlock(&(instance->connected_locker));
 
         pthread_mutex_lock(&(instance->rr_class_locker)); 
         connection_socket=instance->rr_classes[class_index];
@@ -214,9 +214,9 @@ void* Server::fifo_queue_handler(void * args){
     Server* instance=static_cast<Server*>(args);
     bool keep_running=true;
     while(keep_running){
-        // pthread_mutex_lock(&(instance->connected_locker));
-        // keep_running=instance->client_connected>0;
-        // pthread_mutex_unlock(&(instance->connected_locker));
+        pthread_mutex_lock(&(instance->connected_locker));
+        keep_running=instance->client_connected>0;
+        pthread_mutex_unlock(&(instance->connected_locker));
         //checks if there are any requests queued up
         pthread_mutex_lock(&(instance->queue_locker));
         bool empty=instance->fifo_queue.empty();

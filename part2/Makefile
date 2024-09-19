@@ -16,6 +16,7 @@ server:build
 	./server
 client: ./client
 run: build
+	./kill_processes
 	./server &
 	./client 
 
