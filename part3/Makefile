@@ -19,15 +19,19 @@ server:build
 	./server
 client: ./client
 run-aloha: build
+		./kill_processes
 		./server &
 		./client aloha
 run-beb: build
+		./kill_processes
 		./server &
 		./client beb
 run-cscd:build
+		./kill_processes
 		./server &
 		./client cscd		
 run: build
+	./kill_processes
 	./server &
 	./client all
 

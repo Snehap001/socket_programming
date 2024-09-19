@@ -113,9 +113,9 @@ int main(int argc, char* argv[]) {
         M.arg="cscd all";
         M.run_clients();
         double cscd_time=calculate_average_time(filename);
-        ofstream txt_file("avg_time.txt", ios::app);
-        txt_file <<slotted_time<<","<<beb_time<<","<<cscd_time<<endl;
-        txt_file.close();
+        
+        cout <<slotted_time<<","<<beb_time<<","<<cscd_time<<endl;
+       
         return 0;
     }
     else if(argc==3){
