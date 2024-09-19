@@ -1,0 +1,8 @@
+1 -nan
+5 -nan
+9 -nan
+13 -nan
+17 -nan
+21 -nan
+25 -nan
+29 -nan

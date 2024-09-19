@@ -4,12 +4,13 @@ CLIENT = single_client
 SERVER = server
 MULT_CLIENTS=client
 EXPERIMENT=experiment
-
+KILL_PROCESSES=kill_processes
 build: $(CLIENT).cpp $(SERVER).cpp 
 	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp -ljsoncpp
 	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
+	$(CC) $(CFLAGS) -o $(KILL_PROCESSES) $(KILL_PROCESSES).cpp -ljsoncpp
 
 server:build
 	./server
@@ -19,6 +20,7 @@ run: build
 	./client 
 
 plot: build
+	./kill_processes
 	./experiment
 	python3 plot.py
 

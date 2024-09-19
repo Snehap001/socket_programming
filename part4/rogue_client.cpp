@@ -202,11 +202,12 @@ int main(int argc, char* argv[]) {
     client->dump_frequency();
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
-    if(argc==3){ 
-        if(std::strcmp(argv[2], "plot") == 0){
-            vector<string>entry={to_string(id),to_string(duration.count())};
-            client->add_time_entry("client_time.csv",entry);
-        }
+    if(argc==4){ 
+       
+        vector<string>entry={to_string(duration.count())};
+        string schedule=argv[3];
+        client->add_time_entry("client_time_"+schedule+".csv",entry);
+        
     }
     delete client;
     return 0;

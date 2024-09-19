@@ -46,6 +46,8 @@ class Server{
     vector<int>rr_classes;
     pthread_mutex_t rr_class_locker;
 
+    // pthread_mutex_t connected_locker;
+    // int client_connected=0;
     void send_file_portion(request r);
     void parse_offset(client_data* thread_cd,queue<int>&offsets);
     void parse_request(client_data* thread_cd,queue<request>&requests);
@@ -93,6 +95,8 @@ void Server::load_config() {
     config.k = configuration["k"].get<int>();
     config.n = configuration["num_clients"].get<int>();
     config.fname=configuration["input_file"].get<std::string>();
+    
+    // client_connected=config.n;
 }
 void Server::load_data() {
     //loads the data from the file
@@ -174,7 +178,12 @@ void* Server::rr_map_handler(void * args){
     int class_index=0;
     int num_connections=instance->config.n;
     int connection_socket;
-    while(true){
+    bool keep_running=true;
+    while(keep_running){
+        // pthread_mutex_lock(&(instance->connected_locker));
+        // keep_running=instance->client_connected>0;
+        // pthread_mutex_unlock(&(instance->connected_locker));
+
         pthread_mutex_lock(&(instance->rr_class_locker)); 
         connection_socket=instance->rr_classes[class_index];
         pthread_mutex_unlock(&(instance->rr_class_locker));
@@ -198,12 +207,16 @@ void* Server::rr_map_handler(void * args){
         r.offset=request_offset;
         instance->send_file_portion(r);
     }
+    return nullptr;
 }
 void* Server::fifo_queue_handler(void * args){
     pthread_detach(pthread_self());
     Server* instance=static_cast<Server*>(args);
-    while(true){
-
+    bool keep_running=true;
+    while(keep_running){
+        // pthread_mutex_lock(&(instance->connected_locker));
+        // keep_running=instance->client_connected>0;
+        // pthread_mutex_unlock(&(instance->connected_locker));
         //checks if there are any requests queued up
         pthread_mutex_lock(&(instance->queue_locker));
         bool empty=instance->fifo_queue.empty();
@@ -313,6 +326,10 @@ void* Server::fifo_client_handler(void * args){
     }  
     //closes the connection with the client
     close(thread_cd->connection_socket);
+    // pthread_mutex_lock(&(instance->connected_locker));
+    // instance->client_connected--;
+    // pthread_mutex_unlock(&(instance->connected_locker));
+
     delete thr_args;
     return nullptr;
 }
@@ -369,13 +386,17 @@ void* Server::rr_client_handler(void * args){
     
     //closes the connection with the client
     close(thread_cd->connection_socket);
+    // pthread_mutex_lock(&(instance->connected_locker));
+    // instance->client_connected--;
+    // pthread_mutex_unlock(&(instance->connected_locker));
     delete thr_args;
     return nullptr;
 }
+
 void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
-
+    
     if(config.pol==fifo){
         //thread which entertains requests in the fifo order.
         pthread_t fifo_thread;
@@ -391,7 +412,11 @@ void Server::run(){
         }        
     }
     //listens to connection requests forever
-    while(true){
+    bool keep_running=true;
+    while(keep_running){
+        // pthread_mutex_lock(&(connected_locker));
+        // keep_running=client_connected>0;
+        // pthread_mutex_unlock(&(connected_locker));
         int connection_socket=accept_connection(); 
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
@@ -414,10 +439,13 @@ void Server::run(){
         }
     }
 }
+
 int main(int argc, char* argv[]) {
     string policy_choice=argv[1];
     Server * server=new Server();
+    
     server->load_config();
+    
     server->set_policy(policy_choice);
     server->load_data();
     server->run();

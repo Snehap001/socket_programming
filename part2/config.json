@@ -1,8 +1,1 @@
-{
-	"input_file" : "input_666.txt",
-	"k" : 10,
-	"num_clients" : 5,
-	"p" : 5,
-	"server_ip" : "127.0.0.1",
-	"server_port" : 65432
-}
+{"input_file":"test_case.txt","k":10,"num_clients":29,"p":5,"server_ip":"127.0.0.1","server_port":8086}

@@ -103,10 +103,10 @@ double Experiment::calculate_average_time(const string& csv_filename) {
     getline(csv_file, line);
     while (getline(csv_file, line)) {
         stringstream ss(line);
-        string id_str, time_str;
+        string time_str;
 
-        getline(ss, id_str, ',');
-        getline(ss, time_str, ',');
+  
+        getline(ss, time_str);
 
         double time = stod(time_str);
         times.push_back(time);
@@ -136,20 +136,19 @@ void Experiment:: run(bool isFifo){
     }
     
     int max_n=32;
-    vector<double> average_times;
-    vector<double> confidence_intervals;
-    ofstream time_file("avg_time_per_client_"+schedule+".txt", ios::out);
+   
+
+    ofstream time_file("avg_time_"+schedule+".txt", ios::out);
     time_file.close();
     for (int n=1;n<=max_n;n=n+4){       
         string filename="client_time_"+schedule+".csv";
         ofstream file(filename, ios::out);
         file.close();
         updateConfig(n);
-        vector<string>entry={"id","time"};
-        add_entry(filename,entry);
+      
         execute(isFifo);
         double avg=calculate_average_time(filename);
-        write_average_to_file("avg_time_per_client_"+schedule+".txt",avg,n);
+        write_average_to_file("avg_time_"+schedule+".txt",avg,n);
     }
 }
 int main(){

@@ -24,6 +24,7 @@ class MultClients {
     string arg;
     MultClients();
     void run_clients();
+    void run_fairness();
 };
 
 MultClients::MultClients() {
@@ -49,7 +50,25 @@ void* MultClients::run_executable(void* arg) {
 
 void MultClients::run_clients() {
     vector<string> commands;
-    string s = "./rogue_client 1" +arg;
+
+    for (int i = 1; i <= num_clients; i++) {
+        string s = "./single_client " + to_string(i)+" "+arg;
+        commands.push_back(s);
+    }
+
+    vector<pthread_t> threads(num_clients);
+
+    for (int i = 0; i < num_clients; i++) {
+        pthread_create(&threads[i], nullptr, run_executable, static_cast<void*>(&commands[i]));
+    }
+
+    for (auto& th : threads) {
+        pthread_join(th, nullptr);
+    }
+}
+void MultClients::run_fairness() {
+    vector<string> commands;
+    string s = "./rogue_client 1 " +arg;
     commands.push_back(s);
     for (int i = 2; i <= num_clients; i++) {
         string s = "./single_client " + to_string(i)+" "+arg;
@@ -66,21 +85,88 @@ void MultClients::run_clients() {
         pthread_join(th, nullptr);
     }
 }
+double calculate_average_time(const string& csv_filename) {
+    ifstream csv_file(csv_filename);
+    if (!csv_file.is_open()) {
+        cerr << "Could not open the CSV file!" << endl;
+        return -1;
+    }
+    string line;
+    vector<double> times;
+    getline(csv_file, line);
+    while (getline(csv_file, line)) {
+        stringstream ss(line);
+        string time_str;
 
+     
+        getline(ss, time_str);
+
+        double time = stod(time_str);
+        times.push_back(time);
+        
+    }
+    csv_file.close();
+    double sum = accumulate(times.begin(), times.end(), 0.0);
+    return sum / times.size();
+}
+double calc_fairness_index(string csv_filename,int n){
+    ifstream csv_file(csv_filename);
+
+    string line;
+    vector<double> times;
+    getline(csv_file, line);
+    while (getline(csv_file, line)) {
+        stringstream ss(line);
+        string time_str;
+
+     
+        getline(ss, time_str);
+
+        double time = stod(time_str);
+        times.push_back(time);
+        
+    }
+    csv_file.close();
+
+    double sum_val=0.0;
+    double square_sum=0.0;
+    for (auto v:times){
+        sum_val+=v;
+        square_sum+=(v*v);
+    }
+    double index=(sum_val*sum_val)/(n*square_sum);
+    return index;
+    
+}
 int main(int argc, char* argv[]) {
     MultClients M;
     if(argc==3){
         if(std::strcmp(argv[1], "plot") == 0  ){
             string schedule=argv[2];
             M.arg="plot "+schedule;
+            M.run_clients();
+        }
+        else if(strcmp(argv[1],"fairness")==0){
+
+            string schedule=argv[2];
+            M.arg="not_plot "+schedule;
+            M.run_fairness();
+            double avg_time=calculate_average_time("client_time_"+schedule+".csv");
+            double index=calc_fairness_index("client_time_"+schedule+".csv",10);
+            cout<<avg_time<<","<<index<<endl;
+
         }
         else{
             M.arg="not_plot";
         }
     }
-    else{
-        M.arg="not_plot";        
+    else if(argc==2){
+        string schedule=argv[1];
+        M.arg="not_plot "+schedule; 
+        M.run_clients();
+        double avg_time=calculate_average_time("client_time_"+schedule+".csv");
+        cout<<avg_time<<endl;
     }
-    M.run_clients();
+   
     return 0;
 }

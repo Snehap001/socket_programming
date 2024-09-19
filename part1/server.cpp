@@ -179,36 +179,36 @@ bool Server::parse_request(){
     //has not reached end of the packet
     return true;
 }
+
 void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
     bool connected,request_remaining;
-    //listens to connection requests forever
-    while(true){
-        accept_connection();
-        //has connected to the client after accepting connection
-        connected=true;
-        //entertains all requests while client chooses to remain connected
-        while(connected){
-            request_remaining=true;
-            offset="";
-            //reads the request packet entirely
-            while(request_remaining){
-                connected=read_request();
-                if(!connected){
-                    break;
-                }
-                request_remaining=parse_request();
-            }
+    
+    accept_connection();
+    //has connected to the client after accepting connection
+    connected=true;
+    //entertains all requests while client chooses to remain connected
+    while(connected){
+        request_remaining=true;
+        offset="";
+        //reads the request packet entirely
+        while(request_remaining){
+            connected=read_request();
             if(!connected){
                 break;
             }
-            //sends the file from the requested offset
-            send_file_portion();
-        }  
-        //closes the connection with the client
-        close(connection_socket);
-    }
+            request_remaining=parse_request();
+        }
+        if(!connected){
+            break;
+        }
+        //sends the file from the requested offset
+        send_file_portion();
+    }  
+    //closes the connection with the client
+    close(connection_socket);
+    
 }
 int main() {
     Server * server=new Server();

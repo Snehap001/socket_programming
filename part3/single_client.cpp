@@ -49,7 +49,7 @@ class Client{
     void download_file_slotted_aloha();
 
     public:
-    Client(int);
+    Client(int id);
     void load_config();
     void set_protocol(string p);
     void add_time_entry(const string& filename, const vector<string>& new_row);
@@ -65,13 +65,13 @@ Client::~Client(){
     delete buffer;
 }
 void Client::set_protocol(string p){
-    if(p=="SLOTTED_ALOHA"){
+    if(p=="aloha"){
         config.prot=slotted_aloha;
     }
-    else if(p=="BEB"){
+    else if(p=="beb"){
         config.prot=beb;
     }
-    else if(p=="SENSING_BEB"){
+    else if(p=="cscd"){
         config.prot=sensing_beb;
     }
 }
@@ -217,10 +217,13 @@ void Client::download_file(){
 void Client::wait_till_idle(){
     status s=BUSY;
     int waiting_period=(int)((config.T)/1000);
+
     while(s==BUSY){
+        
         send(communication_socket, "BUSY?\n", 6, 0); 
         read_data();   
         s=parse_status();
+      
         if(s==BUSY){
             sleep(waiting_period);
         }
@@ -332,9 +335,7 @@ void Client::add_time_entry(const string& filename, const vector<string>& new_ro
     }
     for (size_t i = 0; i < new_row.size(); ++i) {
         file << new_row[i];
-        if (i != new_row.size() - 1) {
-            file << ",";  
-        }
+        
     }
     file << "\n"; 
     file.close();
@@ -359,20 +360,28 @@ void Client::dump_frequency(){
     outFile.close();
 }
 int main(int argc, char* argv[]) {
-    int id=stoi(argv[1]);
+    cout<<"client called"<<endl;
+    string str(argv[1]);
+    int id=0;
+    for(char ch:str){
+        id=(id*10)+((int)ch)-48;
+    }
     Client *client=new Client(id);
+    string prot=argv[2];
+
     client->load_config();
-    client->set_protocol("SLOTTED_ALOHA");
+    client->set_protocol(prot);
     auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
-    if(argc==3){ 
-        if(std::strcmp(argv[2], "plot") == 0){
-            vector<string>entry={to_string(id),to_string(duration.count())};
-            client->add_time_entry("client_time.csv",entry);
-        }
+    if(argc==4){ 
+        
+        vector<string>entry={to_string(duration.count())};
+        client->add_time_entry("client_time.csv",entry);
+        
+    
     }
     delete client;
     return 0;

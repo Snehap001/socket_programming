@@ -1,36 +1,46 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-n_values_fifo = []
-average_times_fifo = []
-n_values_rr = []
-average_times_rr = []
+n_values= []
+avg_times_fifo = []
 
-with open("avg_time_per_client_fifo.txt") as f:
-    for line in f:
-        n, avg_time = map(float, line.split(" "))
-        n_values_fifo.append(n)
-        average_times_fifo.append(avg_time)
-with open("avg_time_per_client_rr.txt") as f:
-    for line in f:
-        n, avg_time = map(float, line.split(" "))
-        n_values_rr.append(n)
-        average_times_rr.append(avg_time)
-       
+avg_times_rr = []
 
-n_values_fifo = np.array(n_values_fifo)
-average_times_fifo = np.array(average_times_fifo)
-n_values_rr = np.array(n_values_rr)
-average_times_rr = np.array(average_times_rr)
+def read_file(filename):
+    data=[]
+    with open(filename,'r') as file:
+        for line in file:
+            n,avg=line.split()
+            data.append((int(n)),float(avg))
+    return data
+def write_combined(file1,file2,output):
+    with open(output,'w') as outfile:
+        for (n1, avg1), (_, avg2)in zip(file1, file2):
+            outfile.write(f"{n1} {avg1} {avg2} \n")
+file1='avg_time_fifo.txt'
+file2='avg_time_rr.txt'
+f1_data=read_file(file1)
+f2_data=read_file(file2)
+write_combined(f1_data,f2_data,'avg_time.txt')
+with open("avg_time.txt") as f:
+    for line in f:
+        n, fifo,rr = map(float, line.split(" "))
+        n_values.append(n)
+        avg_times_fifo.append(fifo)
+        avg_times_rr.append(rr)
+
+
+n_values = np.array(n_values)
+avg_times_fifo = np.array(avg_times_fifo)
+avg_times_rr = np.array(avg_times_rr)
+
 # coefficients = np.polyfit(n_values, average_times, 5)
 # polynomial = np.poly1d(coefficients)
 # y_curve=polynomial(n_values)
 
 plt.figure(figsize=(10, 6))
-plt.errorbar(n_values_fifo, average_times_fifo, fmt='o', linestyle='none', capsize=5, label="Fifo")
-plt.plot(n_values_fifo, average_times_fifo, color='red')
-plt.errorbar(n_values_rr, average_times_rr, fmt='o', linestyle='none', capsize=5, label="Round Robin")
-plt.plot(n_values_rr, average_times_rr, color='blue')
+plt.plot(n_values, avg_times_fifo, color='red',label="FIFO ")
+plt.plot(n_values, avg_times_rr, color='blue',label="RR")
 
 plt.xlabel('n values')
 plt.ylabel('Completion Time (seconds)')

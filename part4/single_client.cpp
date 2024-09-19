@@ -176,9 +176,7 @@ void Client::add_time_entry(const string& filename, const vector<string>& new_ro
     }
     for (size_t i = 0; i < new_row.size(); ++i) {
         file << new_row[i];
-        if (i != new_row.size() - 1) {
-            file << ",";  
-        }
+       
     }
     file << "\n"; 
     file.close();
@@ -191,7 +189,6 @@ void Client::dump_frequency(){
     }
     for (const auto& pair : word_count) {
         outFile << pair.first << ", " << pair.second << std::endl;
-        cout<< pair.first << ", " << pair.second << std::endl;
     }
     outFile.close();
 }
@@ -206,11 +203,12 @@ int main(int argc, char* argv[]) {
     auto end = chrono::high_resolution_clock::now();
     chrono::duration<double> duration = end - start;
     if(argc==4){ 
-        if(std::strcmp(argv[2], "plot") == 0){
-            vector<string>entry={to_string(id),to_string(duration.count())};
-            string schedule=argv[3];
-            client->add_time_entry("client_time_"+schedule+".csv",entry);
-        }
+        
+        vector<string>entry={to_string(duration.count())};
+        cout<<"time"<<entry[0]<<endl;
+        string schedule=argv[3];
+        client->add_time_entry("client_time_"+schedule+".csv",entry);
+        
     }
     delete client;
     return 0;

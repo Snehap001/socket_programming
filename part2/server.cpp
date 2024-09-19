@@ -31,7 +31,8 @@ class Server{
     struct sockaddr_in serv_addr;
     int listening_socket;
     vector<string> file;
-
+    pthread_mutex_t connected_locker;
+    int client_connected;
     void send_file_portion(client_data* thread_cd);
     bool parse_request(client_data* thread_cd);
     static void* client_handler(void * cd);
@@ -64,6 +65,7 @@ void Server::load_config() {
     config.p = configuration["p"].get<int>();
     config.k = configuration["k"].get<int>();
     config.fname=configuration["input_file"].get<string>().c_str();
+    client_connected=configuration["num_clients"].get<int>();
 }
 void Server::load_data() {
     //loads the data from the file
@@ -212,14 +214,22 @@ void* Server::client_handler(void * args){
     }  
     //closes the connection with the client
     close(thread_cd->connection_socket);
+    pthread_mutex_lock(&(instance->connected_locker));
+    instance->client_connected--;
+    pthread_mutex_unlock(&(instance->connected_locker));
     delete thr_args;
     return nullptr;
 }
+
 void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
     //listens to connection requests forever
-    while(true){
+    bool keep_running=true;
+    while(keep_running){
+        pthread_mutex_lock(&(connected_locker));
+        keep_running=client_connected>0;
+        pthread_mutex_unlock(&(connected_locker));
         int connection_socket=accept_connection(); 
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
@@ -232,6 +242,7 @@ void Server::run(){
         }
     }
 }
+
 int main() {
     Server * server=new Server();
     server->load_config();

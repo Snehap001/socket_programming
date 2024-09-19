@@ -189,13 +189,13 @@ void Client::dump_frequency(){
     }
     for (const auto& pair : word_count) {
         outFile << pair.first << ", " << pair.second << endl;
-        cout<<pair.first << ", " << pair.second << endl;
     }
     
     outFile.close();
 }
 int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
+    
     Client *client=new Client(id);
     client->load_config();
     auto start = chrono::high_resolution_clock::now();
