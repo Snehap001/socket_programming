@@ -208,6 +208,7 @@ void Server::run(){
     }  
     //closes the connection with the client
     close(connection_socket);
+    close(listening_socket);
     
 }
 int main() {

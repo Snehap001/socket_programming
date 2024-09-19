@@ -85,6 +85,7 @@ void Experiment:: run(){
         vector<double> times;
 
         for (int i = 0; i < NUM_RUNS; ++i) {
+            sleep(1);
             updateConfig(p);
             auto start = chrono::high_resolution_clock::now();
             execute();
