@@ -37,9 +37,7 @@ fairness: build
 	./kill_processes
 	./server fifo &
 	./client fairness fifo
-	./kill_processes
-	./server rr &
-	./client fairness rr
+	
 	
 
 

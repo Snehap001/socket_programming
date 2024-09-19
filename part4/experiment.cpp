@@ -144,6 +144,7 @@ void Experiment:: run(bool isFifo){
         string filename="client_time_"+schedule+".csv";
         ofstream file(filename, ios::out);
         file.close();
+        sleep(5);
         updateConfig(n);
       
         execute(isFifo);

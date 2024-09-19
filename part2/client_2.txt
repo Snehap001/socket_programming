@@ -2601,7 +2601,7 @@ by-alley, 1
 by-doingby-drinking, 1
 by-west, 1
 byhand, 1
-byreman, 1
+byreman, 1
 caam, 1
 cabineted, 1
 cacao, 1
