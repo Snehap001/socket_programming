@@ -379,6 +379,7 @@ int main(int argc, char* argv[]) {
     if(argc==4){ 
         
         vector<string>entry={to_string(duration.count())};
+        cout<<entry[0]<<endl;
         client->add_time_entry("client_time.csv",entry);
         
     
