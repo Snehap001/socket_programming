@@ -289,7 +289,7 @@ void Server::run(){
     while(num_client_connected>0){
         
         int connection_socket=accept_connection(); 
-        // num_client_connected--;
+        num_client_connected--;
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
         ThreadArgs* args=new ThreadArgs{cd,this};
@@ -307,6 +307,7 @@ void Server::run(){
         pthread_mutex_unlock(&(connected_locker));
 
     }    
+    cout<<"Killed"<<endl;
     close(listening_socket);
     
 

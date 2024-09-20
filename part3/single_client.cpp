@@ -34,11 +34,9 @@ class Client{
     bool file_received;
     std::map<std::string, int> word_count;
     default_random_engine generator; 
-    bool connection_established=false;
-    void open_connection();
     void request_contents(int offset);
     void wait_till_idle();
-    void wait_for_slot(double prob);
+    void wait_for_slot(double prob,bool);
     void add_to_map(multiset<string> & words);
     void parse_packet(int & words_remaining,multiset<string> & words);
     status parse_status();
@@ -51,6 +49,7 @@ class Client{
     public:
     Client(int id);
     void load_config();
+    void open_connection();
     void set_protocol(string p);
     void add_time_entry(const string& filename, const vector<string>& new_row);
     void download_file();
@@ -103,15 +102,18 @@ void Client::open_connection() {
         close(communication_socket);
     }
     //does the three-way handshake
-    if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
-        std::cerr << "Connection failed" << std::endl;
-        close(communication_socket);
-        connection_established=false;
+    bool connection_established=false;
+    while(!connection_established){
+        if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+            std::cerr << "Connection failed" << std::endl;
+            connection_established=false;
+        }
+        else{
+            connection_established=true;
+        }
+        sleep(1);
+    }
 
-    }
-    else{
-        connection_established=true;
-    }
 
 }
 void Client::request_contents(int offset){
@@ -235,27 +237,27 @@ void Client::wait_till_idle(){
         }
     }
 }
-void Client::wait_for_slot(double prob){
+void Client::wait_for_slot(double prob,bool fresh_request){
     uniform_real_distribution<double> distribution (0.0,1.0); 
     generator.seed(time(0));
     while(true){
         int now = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::system_clock::now().time_since_epoch()).count();
         if((now%config.T)==0){
-            double toss=distribution(generator);
-            if(toss<=prob){
+            if(fresh_request){
                 return;
+            }
+            else{
+                double toss=distribution(generator);
+                if(toss<=prob){
+                    return;
+                }
             }
         }
     }
 }
 void Client::download_file_sensing_beb() {
    //sets up the connection
-   while(!connection_established){
-        open_connection();
-        sleep(1);
-   }
-    
     file_received=false;
     int offset=0,words_remaining=0,num_attempts=0;
     //sends requests till the entire file is not received
@@ -283,10 +285,6 @@ void Client::download_file_sensing_beb() {
 }
 void Client::download_file_beb() {
     //sets up the connection
-    while(!connection_established){
-        open_connection();
-        sleep(1);
-    }
     
     file_received=false;
     int offset=0;
@@ -315,20 +313,16 @@ void Client::download_file_beb() {
     close(communication_socket);
 }
 void Client::download_file_slotted_aloha() {
-    //sets up the connection
-    while(!connection_established){
-        open_connection();
-        sleep(1);
-    }
-    
+    //sets up the connection 
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received
     int words_remaining;
     double prob=(1/((double)(config.n)));
     time_t slot;
+    bool fresh_request=true;
     while(!file_received){
-        wait_for_slot(prob);
+        wait_for_slot(prob,fresh_request);
         request_contents(offset);
         words_remaining=config.k;
         multiset <string> words;
@@ -340,6 +334,10 @@ void Client::download_file_slotted_aloha() {
         if(words_remaining>=(-1)){
             add_to_map(words);
             offset+=config.k;
+            fresh_request=true;
+        }
+        else{
+            fresh_request=false;
         }
     }
     //tells the server to close the conversation
@@ -389,6 +387,7 @@ int main(int argc, char* argv[]) {
 
     client->load_config();
     client->set_protocol(prot);
+    client->open_connection();
     auto start = chrono::high_resolution_clock::now();
     client->download_file();
     client->dump_frequency();
