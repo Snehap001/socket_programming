@@ -11,12 +11,14 @@
 #include <unistd.h>
 #include <pthread.h>
 #include "json.hpp"
+#include <arpa/inet.h>
 using json = nlohmann::json;  // Include JSON library
 using namespace std;
 enum status{BUSY,IDLE};
 struct server_config{
     int server_port,k,p,n;
     const char* fname;
+    string server_ip;
 };
 struct client_data{
     char* buffer;
@@ -33,12 +35,13 @@ struct state{
 class Server{
     private:
     const int BUFFSIZE=1024;   
-    const int MAX_CONNECTIONS=1;
     struct server_config config;
     struct sockaddr_in serv_addr;
     int listening_socket;
     state st;
     vector<string> file;
+    pthread_mutex_t connected_locker;
+    int client_connected;
 
     void send_file_portion(client_data* thread_cd);
     void parse_request(client_data* thread_cd);
@@ -74,6 +77,8 @@ void Server::load_config() {
     config.k = configuration["k"].get<int>();
     config.fname=configuration["input_file"].get<string>().c_str();
     config.n = configuration["num_clients"].get<int>();
+    config.server_ip=configuration["server_ip"].get<string>();
+    client_connected=config.n;
 }
 void Server::load_data() {
     //loads the data from the file
@@ -153,11 +158,7 @@ bool Server::read_request(client_data* thread_cd){
 int Server::accept_connection(){
 
     // wait for a connection request
-    if (listen(listening_socket, MAX_CONNECTIONS) < 0) {
-        std::cerr << "Listen failed" << std::endl;
-        close(listening_socket);        
-        exit(1);
-    }    
+        
 
     //accept request to connect
     struct sockaddr_in clnt_addr;
@@ -181,13 +182,18 @@ void Server::open_listening_socket(){
     //creates the server address
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_addr.s_addr =inet_addr(config.server_ip.c_str());
     serv_addr.sin_port = htons(config.server_port);
 
     // bind socket
     if (bind(listening_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         perror("Bind failed");
         close(listening_socket);
+        exit(1);
+    }
+    if (listen(listening_socket, config.n) < 0) {
+        std::cerr << "Listen failed" << std::endl;
+        close(listening_socket);        
         exit(1);
     }
 }
@@ -263,7 +269,14 @@ void* Server::client_handler(void * args){
 
     }  
     //closes the connection with the client
-    close(thread_cd->connection_socket);
+   
+    
+    close(thread_cd->connection_socket);  
+    pthread_mutex_lock(&(instance->connected_locker));
+    instance->client_connected--;
+    pthread_mutex_unlock(&(instance->connected_locker));
+    
+
     delete thr_args;
     return nullptr;
 }
@@ -276,6 +289,7 @@ void Server::run(){
     while(num_client_connected>0){
         
         int connection_socket=accept_connection(); 
+        // num_client_connected--;
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
         ThreadArgs* args=new ThreadArgs{cd,this};
@@ -286,6 +300,16 @@ void Server::run(){
             continue;
         }
     }
+    bool keep_running=true;
+    while(keep_running){
+        pthread_mutex_lock(&(connected_locker));
+        keep_running=client_connected>0;
+        pthread_mutex_unlock(&(connected_locker));
+
+    }    
+    close(listening_socket);
+    
+
 }
 int main() {
     Server * server=new Server();

@@ -27,7 +27,7 @@ class Client{
     string incomplete_packet;
     bool file_received;
     std::map<std::string, int> word_count;
-
+    bool connection_established=false;
     void open_connection();
     void request_contents(int offset);
     int parse_packet();
@@ -77,6 +77,10 @@ void Client::open_connection() {
     if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Connection failed" << std::endl;
         close(communication_socket);
+        connection_established=false;
+    }
+    else{
+        connection_established=true;
     }
 
 }
@@ -95,9 +99,11 @@ void Client::read_data(){
 
     //reads the data from the receive queue into the buffer  
     int bytes_received = recv(communication_socket, buffer, BUFFSIZE-1,0);
-    if (bytes_received < 0) {
+    if (bytes_received <= 0) {
         std::cerr << "Read error client" << std::endl;
+        
         close(communication_socket);
+        throw std::runtime_error("An error occurred");
     }
 
 }
@@ -149,7 +155,10 @@ int Client::parse_packet(){
 }
 void Client::download_file() {
     //sets up the connection
-    open_connection();
+    while(!connection_established){
+        open_connection();
+    }
+    
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received
@@ -195,7 +204,6 @@ void Client::dump_frequency(){
 }
 int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
-    
     Client *client=new Client(id);
     client->load_config();
     auto start = chrono::high_resolution_clock::now();

@@ -26,7 +26,7 @@ class Client{
     string incomplete_packet;
     bool file_received;
     std::map<std::string, int> word_count;
-
+    bool connection_established=false;
     void open_connection();
     void request_contents(int offset);
     int parse_packet();
@@ -76,6 +76,10 @@ void Client::open_connection() {
     if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Connection failed" << std::endl;
         close(communication_socket);
+        connection_established=false;
+    }
+    else{
+        connection_established=true;
     }
 
 }
@@ -97,6 +101,12 @@ void Client::read_data(){
 
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
+        perror("recv failed");
+        
+        throw("error");
+
+
+        
         close(communication_socket);
     }
 
@@ -149,7 +159,10 @@ int Client::parse_packet(){
 }
 void Client::download_file() {
     //sets up the connection
-    open_connection();
+    while(!connection_established){
+        open_connection();
+    }
+    
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received
@@ -194,6 +207,7 @@ void Client::dump_frequency(){
 }
 int main(int argc, char* argv[]) {
     int id=stoi(argv[1]);
+    cout<<id<<endl;
     Client *client=new Client(id);
 
     client->load_config();
@@ -205,7 +219,6 @@ int main(int argc, char* argv[]) {
     if(argc==4){ 
         
         vector<string>entry={to_string(duration.count())};
-        cout<<"time"<<entry[0]<<endl;
         string schedule=argv[3];
         client->add_time_entry("client_time_"+schedule+".csv",entry);
         

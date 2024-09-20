@@ -8,14 +8,21 @@ COMBINE=combine_results
 ROGUE_CLIENT=rogue_client
 KILL_PROCESSES=kill_processes
 build: $(CLIENT).cpp $(CLIENT).cpp $(SERVER).cpp 
-	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(ROGUE_CLIENT) $(ROGUE_CLIENT).cpp -ljsoncpp
-	$(CC) $(CFLAGS) -o $(KILL_PROCESSES) $(KILL_PROCESSES).cpp -ljsoncpp
+	$(CC) $(CFLAGS) -o $(CLIENT) $(CLIENT).cpp 
+	$(CC) $(CFLAGS) -o $(SERVER) $(SERVER).cpp 
+	$(CC) $(CFLAGS) -o $(MULT_CLIENTS) $(MULT_CLIENTS).cpp 
+	$(CC) $(CFLAGS) -o $(EXPERIMENT) $(EXPERIMENT).cpp 
+	$(CC) $(CFLAGS) -o $(ROGUE_CLIENT) $(ROGUE_CLIENT).cpp 
+	$(CC) $(CFLAGS) -o $(KILL_PROCESSES) $(KILL_PROCESSES).cpp 
 	$(CC) $(CFLAGS) -o $(COMBINE) $(COMBINE).cpp 
-
+server-fifo:build
+	./kill_processes
+	./server fifo
+server-rr:build
+	./kill_processes
+	./server rr
+client-fifo:./client fifo
+client-rr:./client rr
 run-fifo: build
 	./kill_processes
 	./server fifo &
@@ -37,6 +44,9 @@ fairness: build
 	./kill_processes
 	./server fifo &
 	./client fairness fifo
+	./kill_processes
+	./server rr &
+	./client fairness rr
 	
 	
 

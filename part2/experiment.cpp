@@ -111,13 +111,12 @@ void Experiment:: run(){
     vector<double> confidence_intervals;
     ofstream time_file("avg_time_per_client.txt", ios::out);
     time_file.close();
-    for (int n=1;n<=max_n;n=n+4){       
+    for (int n=1;n<=max_n;n=n+4){   
+        sleep(1);    
         string filename="client_time.csv";
         ofstream file(filename, ios::out);
         file.close();
         updateConfig(n);
-        vector<string>entry={"time"};
-        add_entry("client_time.csv",entry);
         execute();
         double avg=calculate_average_time(filename);
         write_average_to_file("avg_time_per_client.txt",avg,n);

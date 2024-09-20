@@ -34,7 +34,7 @@ class Client{
     bool file_received;
     std::map<std::string, int> word_count;
     default_random_engine generator; 
-
+    bool connection_established=false;
     void open_connection();
     void request_contents(int offset);
     void wait_till_idle();
@@ -106,6 +106,11 @@ void Client::open_connection() {
     if (connect(communication_socket, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
         std::cerr << "Connection failed" << std::endl;
         close(communication_socket);
+        connection_established=false;
+
+    }
+    else{
+        connection_established=true;
     }
 
 }
@@ -127,6 +132,7 @@ void Client::read_data(){
     if (bytes_received < 0) {
         std::cerr << "Read error client" << std::endl;
         close(communication_socket);
+        throw("error");
     }
 
 }
@@ -245,7 +251,11 @@ void Client::wait_for_slot(double prob){
 }
 void Client::download_file_sensing_beb() {
    //sets up the connection
-    open_connection();
+   while(!connection_established){
+        open_connection();
+        sleep(1);
+   }
+    
     file_received=false;
     int offset=0,words_remaining=0,num_attempts=0;
     //sends requests till the entire file is not received
@@ -273,7 +283,11 @@ void Client::download_file_sensing_beb() {
 }
 void Client::download_file_beb() {
     //sets up the connection
-    open_connection();
+    while(!connection_established){
+        open_connection();
+        sleep(1);
+    }
+    
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received
@@ -302,7 +316,11 @@ void Client::download_file_beb() {
 }
 void Client::download_file_slotted_aloha() {
     //sets up the connection
-    open_connection();
+    while(!connection_established){
+        open_connection();
+        sleep(1);
+    }
+    
     file_received=false;
     int offset=0;
     //sends requests till the entire file is not received

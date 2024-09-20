@@ -14,7 +14,7 @@
 using json = nlohmann::json;  // Include JSON library
 using namespace std;
 struct server_config{
-    int server_port,k,p;
+    int server_port,k,p,n;
     const char* fname;
 };
 struct client_data{
@@ -65,7 +65,8 @@ void Server::load_config() {
     config.p = configuration["p"].get<int>();
     config.k = configuration["k"].get<int>();
     config.fname=configuration["input_file"].get<string>().c_str();
-    client_connected=configuration["num_clients"].get<int>();
+    config.n=configuration["num_clients"].get<int>();
+    client_connected=config.n;
 }
 void Server::load_data() {
     //loads the data from the file
@@ -225,12 +226,10 @@ void Server::run(){
     //opens the server's socket for listening to connection requests
     open_listening_socket();
     //listens to connection requests forever
-    bool keep_running=true;
-    while(keep_running){
-        pthread_mutex_lock(&(connected_locker));
-        keep_running=client_connected>0;
-        pthread_mutex_unlock(&(connected_locker));
+    int num_clients_connected=config.n;
+    while(num_clients_connected>0){
         int connection_socket=accept_connection(); 
+        num_clients_connected--;
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
         ThreadArgs* args=new ThreadArgs{cd,this};
@@ -241,6 +240,15 @@ void Server::run(){
             continue;
         }
     }
+    bool keep_running=true;
+    while(keep_running){
+        pthread_mutex_lock(&(connected_locker));
+        keep_running=client_connected>0;
+        pthread_mutex_unlock(&(connected_locker));
+
+    }    
+    close(listening_socket);
+    
 }
 
 int main() {

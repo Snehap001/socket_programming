@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <pthread.h>
 #include <map>
+#include <arpa/inet.h>
 #include "json.hpp"
 using json = nlohmann::json;
 using namespace std;
@@ -20,6 +21,7 @@ struct server_config{
     int server_port,k,p,n;
     string fname;
     policy pol;
+    string server_ip;
 };
 struct client_data{
     char* buffer;
@@ -95,7 +97,7 @@ void Server::load_config() {
     config.k = configuration["k"].get<int>();
     config.n = configuration["num_clients"].get<int>();
     config.fname=configuration["input_file"].get<std::string>();
-    
+    config.server_ip=configuration["server_ip"].get<std::string>();
     client_connected=config.n;
 }
 void Server::load_data() {
@@ -160,11 +162,7 @@ bool Server::read_request(client_data* thread_cd){
 int Server::accept_connection(){
 
     // wait for a connection request
-    if (listen(listening_socket, MAX_CONNECTIONS) < 0) {
-        std::cerr << "Listen failed" << std::endl;
-        close(listening_socket);        
-        exit(1);
-    }    
+    
 
     //accept request to connect
     struct sockaddr_in clnt_addr;
@@ -253,7 +251,7 @@ void Server::open_listening_socket(){
     //creates the server address
     memset(&serv_addr, 0, sizeof(serv_addr));
     serv_addr.sin_family = AF_INET;
-    serv_addr.sin_addr.s_addr = htonl(INADDR_ANY);
+    serv_addr.sin_addr.s_addr =inet_addr(config.server_ip.c_str());
     serv_addr.sin_port = htons(config.server_port);
 
     // bind socket
@@ -262,6 +260,11 @@ void Server::open_listening_socket(){
         close(listening_socket);
         exit(1);
     }
+    if (listen(listening_socket, config.n) < 0) {
+        std::cerr << "Listen failed" << std::endl;
+        close(listening_socket);        
+        exit(1);
+    }    
 }
 void Server::parse_offset(client_data* thread_cd,queue<int>&offsets){
     char* ptr=thread_cd->buffer;
@@ -326,9 +329,9 @@ void* Server::fifo_client_handler(void * args){
     }  
     //closes the connection with the client
     close(thread_cd->connection_socket);
-    // pthread_mutex_lock(&(instance->connected_locker));
-    // instance->client_connected--;
-    // pthread_mutex_unlock(&(instance->connected_locker));
+    pthread_mutex_lock(&(instance->connected_locker));
+    instance->client_connected--;
+    pthread_mutex_unlock(&(instance->connected_locker));
 
     delete thr_args;
     return nullptr;
@@ -386,9 +389,9 @@ void* Server::rr_client_handler(void * args){
     
     //closes the connection with the client
     close(thread_cd->connection_socket);
-    // pthread_mutex_lock(&(instance->connected_locker));
-    // instance->client_connected--;
-    // pthread_mutex_unlock(&(instance->connected_locker));
+    pthread_mutex_lock(&(instance->connected_locker));
+    instance->client_connected--;
+    pthread_mutex_unlock(&(instance->connected_locker));
     delete thr_args;
     return nullptr;
 }
@@ -412,12 +415,11 @@ void Server::run(){
         }        
     }
     //listens to connection requests forever
-    bool keep_running=true;
-    while(keep_running){
-        // pthread_mutex_lock(&(connected_locker));
-        // keep_running=client_connected>0;
-        // pthread_mutex_unlock(&(connected_locker));
+    int num_client_connected=config.n;
+    while(num_client_connected>0){
+        
         int connection_socket=accept_connection(); 
+        num_client_connected--;
         char* buffer=new char[BUFFSIZE];
         client_data* cd = new client_data{buffer,"",connection_socket}; 
         ThreadArgs* args=new ThreadArgs{cd,this};
@@ -438,6 +440,13 @@ void Server::run(){
             }
         }
     }
+    bool keep_running=true;
+    while(keep_running){
+        pthread_mutex_lock(&(connected_locker));
+        keep_running=client_connected>0;
+        pthread_mutex_unlock(&(connected_locker));
+    }
+    close(listening_socket);
 }
 
 int main(int argc, char* argv[]) {

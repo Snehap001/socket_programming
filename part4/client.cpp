@@ -100,7 +100,6 @@ double calculate_average_time(const string& csv_filename) {
 
      
         getline(ss, time_str);
-
         double time = stod(time_str);
         times.push_back(time);
         
@@ -121,7 +120,6 @@ double calc_fairness_index(string csv_filename,int n){
 
      
         getline(ss, time_str);
-
         double time = stod(time_str);
         times.push_back(time);
         
@@ -131,8 +129,8 @@ double calc_fairness_index(string csv_filename,int n){
     double sum_val=0.0;
     double square_sum=0.0;
     for (auto v:times){
-        sum_val+=v;
-        square_sum+=(v*v);
+        sum_val+=1/v;
+        square_sum+=(1/(v*v));
     }
     double index=(sum_val*sum_val)/(n*square_sum);
     return index;
@@ -153,7 +151,9 @@ int main(int argc, char* argv[]) {
             M.run_fairness();
             double avg_time=calculate_average_time("client_time_"+schedule+".csv");
             double index=calc_fairness_index("client_time_"+schedule+".csv",10);
-            cout<<avg_time<<","<<index<<endl;
+            ofstream txt_file("jains_fairness_index.txt", ios::app);
+            txt_file<<avg_time<<","<<index<<endl;
+            txt_file.close();
 
         }
         else{

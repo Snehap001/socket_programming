@@ -15,9 +15,20 @@ build: $(CLIENT).cpp $(SERVER).cpp
 
 
 
-server:build
+server-aloha:build
+	./kill_processes
 	./server
-client: ./client
+server-beb:build
+	./kill_processes
+	./server 
+server-cscd:build
+	./kill_processes
+	./server
+
+client-aloha: ./client aloha
+client-beb:./client beb
+client-cscd:./client cscd
+
 run-aloha: build
 		./kill_processes
 		./server &
